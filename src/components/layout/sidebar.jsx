@@ -18,8 +18,10 @@ export default function Sidebar({
 }) {
   const handleNavClick = (id) => {
     setActiveNav(id)
-    // cerrar solo en mobile (menos de 768px de ancho)
-    if (typeof window !== "undefined" && window.innerWidth < 768 && setSidebarOpen) {
+    // Siempre marcamos sidebarOpen = false.
+    // En desktop no se esconde gracias a md:translate-x-0,
+    // en mobile sí se cierra.
+    if (setSidebarOpen) {
       setSidebarOpen(false)
     }
   }

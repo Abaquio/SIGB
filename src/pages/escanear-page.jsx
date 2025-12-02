@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import jsQR from "jsqr"
 import BarrilVistaFullModal from "../components/modales/barril-vistaFull"
 
@@ -18,6 +18,7 @@ export default function EscanearPage() {
   const [stream, setStream] = useState(null)
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
+  const animationFrameIdRef = useRef(null)
 
   const handleCodeDetected = async (code) => {
     if (!code) return
@@ -63,14 +64,6 @@ export default function EscanearPage() {
       })
       setStream(mediaStream)
       setIsCameraOn(true)
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
-        videoRef.current.setAttribute("playsInline", "true")
-        videoRef.current.play()
-      }
-
-      requestAnimationFrame(scanFrame)
     } catch (err) {
       console.error(err)
       setLookupError("No se pudo acceder a la cámara.")
@@ -78,6 +71,11 @@ export default function EscanearPage() {
   }
 
   const stopCamera = () => {
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current)
+      animationFrameIdRef.current = null
+    }
+
     if (stream) {
       stream.getTracks().forEach((t) => t.stop())
     }
@@ -85,32 +83,62 @@ export default function EscanearPage() {
     setIsCameraOn(false)
   }
 
-  const scanFrame = () => {
-    if (!isCameraOn || !videoRef.current || !canvasRef.current) return
+  // Conectar el stream al video y lanzar el loop de escaneo
+  useEffect(() => {
+    if (!isCameraOn || !stream || !videoRef.current || !canvasRef.current) return
 
     const video = videoRef.current
     const canvas = canvasRef.current
     const ctx = canvas.getContext("2d")
-    if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) {
-      requestAnimationFrame(scanFrame)
-      return
+
+    // Configurar video
+    video.srcObject = stream
+    video.setAttribute("playsInline", "true")
+    video.muted = true
+    video.autoplay = true
+
+    const startPlaying = async () => {
+      try {
+        await video.play()
+      } catch (err) {
+        console.error("No se pudo reproducir el video de la cámara:", err)
+      }
+
+      const scan = () => {
+        if (!isCameraOn || !video.videoWidth || !video.videoHeight) {
+          animationFrameIdRef.current = requestAnimationFrame(scan)
+          return
+        }
+
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const qrCode = jsQR(imageData.data, imageData.width, imageData.height)
+
+        if (qrCode?.data) {
+          handleCodeDetected(qrCode.data)
+          stopCamera()
+          return
+        }
+
+        animationFrameIdRef.current = requestAnimationFrame(scan)
+      }
+
+      animationFrameIdRef.current = requestAnimationFrame(scan)
     }
 
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    startPlaying()
 
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const qrCode = jsQR(imageData.data, imageData.width, imageData.height)
-
-    if (qrCode?.data) {
-      handleCodeDetected(qrCode.data)
-      stopCamera()
-      return
+    // Cleanup al desmontar o al apagar la cámara
+    return () => {
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current)
+        animationFrameIdRef.current = null
+      }
     }
-
-    requestAnimationFrame(scanFrame)
-  }
+  }, [isCameraOn, stream])
 
   // -------- Subir imagen ---------
   const handleImageUpload = (e) => {
@@ -169,6 +197,9 @@ export default function EscanearPage() {
                 <video
                   ref={videoRef}
                   className="w-full h-full object-cover"
+                  autoPlay
+                  muted
+                  playsInline
                 />
                 <canvas ref={canvasRef} className="hidden" />
               </>

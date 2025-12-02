@@ -64,13 +64,38 @@ function App() {
   // Estado inicial basado en la URL actual
   const [activeNav, setActiveNav] = useState(() => pathToNav(location.pathname))
 
-  // Sidebar: abierto en desktop (>=768), cerrado en mobile
+  // Sidebar: según ancho inicial de la ventana
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 768
   })
 
-  // Ajustar sidebar al cambiar el tamaño de la ventana
+  // Sincronizar activeNav cuando cambia la URL (ej: usuario escribe /barriles)
+  useEffect(() => {
+    const nav = pathToNav(location.pathname)
+    if (nav !== activeNav) {
+      setActiveNav(nav)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
+
+  // Actualizar URL cuando cambia activeNav desde el sidebar
+  useEffect(() => {
+    const path = navToPath(activeNav)
+    if (location.pathname !== path) {
+      navigate(path, { replace: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNav])
+
+  // 👉 Al cambiar de sección, si estamos en mobile (<768px), cerramos el sidebar
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false)
+    }
+  }, [activeNav])
+
+  // 👉 Listener de resize: en desktop siempre mostramos sidebar, en mobile lo ocultamos
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
@@ -80,27 +105,12 @@ function App() {
       }
     }
 
+    // Llamada inicial por si algo cambió antes de montar
+    handleResize()
+
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
   }, [])
-
-  // Si la URL cambia (ej: usuario escribe /barriles), sincronizamos activeNav
-  useEffect(() => {
-    const nav = pathToNav(location.pathname)
-    if (nav !== activeNav) {
-      setActiveNav(nav)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname])
-
-  // Cada vez que cambie activeNav (por el sidebar), actualizamos la URL
-  useEffect(() => {
-    const path = navToPath(activeNav)
-    if (location.pathname !== path) {
-      navigate(path, { replace: false })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeNav])
 
   const renderPage = () => {
     switch (activeNav) {
