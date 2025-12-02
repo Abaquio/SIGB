@@ -1,8 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import QRCode from "react-qr-code"
 
 export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
+  const [isQrExpanded, setIsQrExpanded] = useState(false)
+
   if (!isOpen || !barril) return null
 
   const handlePrintQR = () => {
@@ -116,7 +119,6 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] animate-in fade-in">
-      {/* Contenedor del modal responsivo */}
       <div
         className="
           bg-card border border-border rounded-xl
@@ -142,20 +144,33 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
           </button>
         </div>
 
-        {/* QR + códigos */}
+        {/* QR + info */}
         <div className="flex flex-col md:flex-row md:items-start gap-6 mb-6">
+          {/* QR */}
           <div className="flex flex-col items-center gap-2 md:w-1/3">
-            <div className="bg-background p-3 sm:p-4 rounded-lg border border-border">
+            <div
+              className={`
+                bg-background p-3 sm:p-4 rounded-lg border border-border
+                transition-transform duration-300
+                ${isQrExpanded ? "scale-110 sm:scale-125" : ""}
+              `}
+            >
               {barril.codigo_qr ? (
-                <QRCode value={barril.codigo_qr} size={140} />
+                <QRCode
+                  value={barril.codigo_qr}
+                  size={isQrExpanded ? 220 : 140}
+                />
               ) : (
                 <span className="text-xs text-muted-foreground">Sin QR</span>
               )}
             </div>
+
             {barril.codigo_qr && (
               <p className="text-xs text-muted-foreground break-all mt-1 sm:mt-2 text-center">
                 Código QR:{" "}
-                <span className="font-mono text-foreground">{barril.codigo_qr}</span>
+                <span className="font-mono text-foreground">
+                  {barril.codigo_qr}
+                </span>
               </p>
             )}
             {barril.codigo_interno && (
@@ -165,6 +180,17 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
                   {barril.codigo_interno}
                 </span>
               </p>
+            )}
+
+            {/* Botón para ampliar/reducir solo el QR */}
+            {barril.codigo_qr && (
+              <button
+                type="button"
+                onClick={() => setIsQrExpanded((prev) => !prev)}
+                className="mt-2 inline-flex items-center px-3 py-1 rounded-full border border-border text-[11px] uppercase tracking-wide text-muted-foreground hover:bg-accent/10"
+              >
+                {isQrExpanded ? "Tamaño normal" : "Ampliar QR"}
+              </button>
             )}
           </div>
 
@@ -185,7 +211,9 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
             <div>
               <p className="text-xs text-muted-foreground">Capacidad (L)</p>
               <p className="text-sm sm:text-base text-foreground">
-                {barril.capacidad_litros != null ? `${barril.capacidad_litros} L` : "—"}
+                {barril.capacidad_litros != null
+                  ? `${barril.capacidad_litros} L`
+                  : "—"}
               </p>
             </div>
             <div>
@@ -219,7 +247,7 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
           </div>
         </div>
 
-        {/* Footer con botones */}
+        {/* Footer */}
         <div className="mt-2 sm:mt-4 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
           {barril.codigo_qr && (
             <>
