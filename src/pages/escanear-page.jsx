@@ -4,7 +4,7 @@ import { useState, useRef } from "react"
 import jsQR from "jsqr"
 import BarrilVistaFullModal from "../components/modales/barril-vistaFull"
 
-const API_BASE_URL = "http://localhost:4000"
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000"
 
 export default function EscanearPage() {
   const [scannedCode, setScannedCode] = useState("")

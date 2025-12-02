@@ -19,7 +19,7 @@ import BarrilVistaFullModal from "../components/modales/barril-vistaFull"
 import ConfirmDialog from "../components/ui/confirm"
 import ValidadoCard from "../components/ui/validado"
 
-const API_BASE_URL = "http://localhost:4000"
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000"
 
 // Datos demo para el gráfico si no hay barriles
 const barrelsDataDemo = [
