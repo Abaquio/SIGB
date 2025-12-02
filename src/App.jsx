@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 
-// 👇 Importamos usando rutas relativas, según tu estructura
+// Layout y páginas
 import Layout from "./components/layout/layout"
 import Dashboard from "./components/dashboard/dashboard"
 
@@ -63,7 +63,26 @@ function App() {
 
   // Estado inicial basado en la URL actual
   const [activeNav, setActiveNav] = useState(() => pathToNav(location.pathname))
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Sidebar: abierto en desktop (>=768), cerrado en mobile
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") return true
+    return window.innerWidth >= 768
+  })
+
+  // Ajustar sidebar al cambiar el tamaño de la ventana
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setSidebarOpen(true)
+      } else {
+        setSidebarOpen(false)
+      }
+    }
+
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
 
   // Si la URL cambia (ej: usuario escribe /barriles), sincronizamos activeNav
   useEffect(() => {

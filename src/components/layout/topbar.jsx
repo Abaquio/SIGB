@@ -7,15 +7,16 @@ export default function TopBar({ sidebarOpen, setSidebarOpen }) {
 
   return (
     <header className="bg-card border-b border-border px-8 py-4 flex items-center justify-between">
+      {/* Botón hamburguesa: solo visible en pantallas pequeñas */}
       <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="p-2 hover:bg-secondary rounded-lg transition-colors"
+        onClick={() => setSidebarOpen && setSidebarOpen(!sidebarOpen)}
+        className="p-2 hover:bg-secondary rounded-lg transition-colors md:hidden"
       >
         <span className="text-xl">☰</span>
       </button>
 
       <div className="text-center flex-1">
-        <h2 className="text-accent font-bold text-2xl">BrewMaster</h2>
+        <h2 className="text-accent font-bold text-2xl">TOTEM</h2>
       </div>
 
       <div className="flex-1 flex items-center justify-end gap-4">
@@ -27,7 +28,7 @@ export default function TopBar({ sidebarOpen, setSidebarOpen }) {
         {/* Menu de tres puntos */}
         <div className="relative">
           <button
-            onClick={() => setShowMenu(!showMenu)}
+            onClick={() => setShowMenu((prev) => !prev)}
             className="p-2 hover:bg-secondary rounded-lg transition-colors"
           >
             <span className="text-xl">⋯</span>
