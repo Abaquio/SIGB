@@ -21,15 +21,60 @@ import ValidadoCard from "../components/ui/validado"
 
 const API_BASE_URL = "http://localhost:4000"
 
-// gráfico estático
-const barrelsData = [
-  { name: "Enero", cantidad: 45, capacidad: 100, porcentaje: 45 },
-  { name: "Febrero", cantidad: 52, capacidad: 100, porcentaje: 52 },
-  { name: "Marzo", cantidad: 48, capacidad: 100, porcentaje: 48 },
-  { name: "Abril", cantidad: 61, capacidad: 100, porcentaje: 61 },
-  { name: "Mayo", cantidad: 55, capacidad: 100, porcentaje: 55 },
-  { name: "Junio", cantidad: 67, capacidad: 100, porcentaje: 67 },
+// Datos demo para el gráfico si no hay barriles
+const barrelsDataDemo = [
+  { name: "IPA", cantidad: 12, capacidad: 500 },
+  { name: "Lager", cantidad: 18, capacidad: 750 },
+  { name: "Stout", cantidad: 9, capacidad: 400 },
 ]
+
+// Construye los puntos del gráfico a partir de los barriles reales
+function buildChartData(barrels) {
+  if (!barrels || barrels.length === 0) return []
+
+  const map = new Map()
+
+  barrels.forEach((barril) => {
+    const tipo = barril.tipo_cerveza || "Sin tipo"
+    const capacidad = Number(barril.capacidad_litros) || 0
+
+    if (!map.has(tipo)) {
+      map.set(tipo, {
+        name: tipo,
+        cantidad: 0,
+        capacidad: 0,
+      })
+    }
+
+    const item = map.get(tipo)
+    item.cantidad += 1
+    item.capacidad += capacidad
+  })
+
+  return Array.from(map.values())
+}
+
+// Colores para la pill del estado
+const getEstadoClasses = (estado) => {
+  switch (estado) {
+    case "DISPONIBLE":
+      return "bg-green-500/20 text-green-400"
+    case "LIMPIEZA":
+      return "bg-blue-500/20 text-blue-400"
+    case "MANTENIMIENTO":
+      return "bg-yellow-500/20 text-yellow-400"
+    case "EN_USO":
+      return "bg-orange-500/20 text-orange-400"
+    default:
+      return "bg-gray-500/20 text-gray-400"
+  }
+}
+
+// Para la barra de capacidad: si tiene capacidad > 0, se ve llena (100%)
+const getCapacidadPercent = (capacidad) => {
+  const cap = Number(capacidad) || 0
+  return cap > 0 ? 100 : 0
+}
 
 export default function BarrelsPage() {
   const [barrels, setBarrels] = useState([])
@@ -49,7 +94,6 @@ export default function BarrelsPage() {
   const [showValidado, setShowValidado] = useState(false)
   const [validadoMessage, setValidadoMessage] = useState("")
 
-  // 🔹 nuevo: modal de vista completa
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [viewBarrel, setViewBarrel] = useState(null)
 
@@ -73,13 +117,14 @@ export default function BarrelsPage() {
     fetchBarrels()
   }, [])
 
-  // crear
+  // abrir modal agregar
   const handleOpenAddModal = () => {
     setModalMode("create")
     setSelectedBarrel(null)
     setIsModalOpen(true)
   }
 
+  // agregar barril
   const handleAddBarril = async (formData) => {
     try {
       const { id, codigo_interno, codigo_qr, ...payload } = formData
@@ -102,7 +147,7 @@ export default function BarrelsPage() {
     }
   }
 
-  // editar
+  // editar barril
   const handleClickEdit = (barrel) => {
     setModalMode("edit")
     setSelectedBarrel(barrel)
@@ -147,7 +192,7 @@ export default function BarrelsPage() {
     }
   }
 
-  // eliminar
+  // eliminar barril
   const handleClickDelete = (barrel) => {
     setBarrelToDelete(barrel)
     setConfirmDeleteOpen(true)
@@ -182,21 +227,15 @@ export default function BarrelsPage() {
     }
   }
 
-  // 🔹 ver detalle
+  // ver detalle
   const handleViewBarrel = (barrel) => {
     setViewBarrel(barrel)
     setViewModalOpen(true)
   }
 
-  // capacidad
-  const maxCapacidad =
-    barrels.reduce((max, b) => {
-      const cap = Number(b.capacidad_litros) || 0
-      return cap > max ? cap : max
-    }, 0) || 1
-
-  const getCapacidadPercent = (capacidad) =>
-    Math.round(((Number(capacidad) || 0) / maxCapacidad) * 100)
+  // datos del gráfico
+  const chartDataRaw = buildChartData(barrels)
+  const chartData = chartDataRaw.length > 0 ? chartDataRaw : barrelsDataDemo
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -216,7 +255,7 @@ export default function BarrelsPage() {
         </button>
       </div>
 
-      {/* Modal crear/editar */}
+      {/* modal agregar/editar */}
       <AgregarBarrilModal
         isOpen={isModalOpen}
         onClose={() => {
@@ -228,7 +267,7 @@ export default function BarrelsPage() {
         onSubmit={modalMode === "create" ? handleAddBarril : handlePrepareEdit}
       />
 
-      {/* Modal vista completa */}
+      {/* modal vista full */}
       <BarrilVistaFullModal
         isOpen={viewModalOpen}
         onClose={() => {
@@ -238,7 +277,7 @@ export default function BarrelsPage() {
         barril={viewBarrel}
       />
 
-      {/* Confirms */}
+      {/* Confirmaciones */}
       <ConfirmDialog
         open={confirmEditOpen}
         title="Guardar cambios"
@@ -270,7 +309,7 @@ export default function BarrelsPage() {
         }}
       />
 
-      {/* Validación */}
+      {/* Validado */}
       <ValidadoCard
         open={showValidado}
         title="Operación exitosa"
@@ -278,29 +317,59 @@ export default function BarrelsPage() {
         onClose={() => setShowValidado(false)}
       />
 
-      {/* Gráfico (no se toca) */}
+      {/* GRAFICO */}
       <div className="bg-card rounded-lg p-6 border border-border">
-        <h2 className="text-xl font-semibold text-foreground mb-4">Evolución de Capacidad</h2>
+        <h2 className="text-xl font-semibold text-foreground mb-4">
+          Evolución por Tipo de Cerveza
+        </h2>
+        <p className="text-xs text-muted-foreground mb-2">
+          Cantidad de barriles y capacidad total por tipo de cerveza.
+        </p>
+
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={barrelsData}>
+          <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-            <XAxis stroke="#888" />
+            <XAxis dataKey="name" stroke="#888" />
             <YAxis stroke="#888" />
-            <Tooltip contentStyle={{ backgroundColor: "#1a1a1a", border: "1px solid #d4af37" }} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#1a1a1a",
+                border: "1px solid #d4af37",
+              }}
+              formatter={(value, name) => {
+                if (name === "capacidad") return [`${value} L`, "Capacidad Total"]
+                if (name === "cantidad") return [value, "Cantidad de Barriles"]
+                return [value, name]
+              }}
+              labelFormatter={(label) => `Tipo: ${label}`}
+            />
             <Legend />
+
+            {/* Cantidad de barriles – dorado */}
             <Line
               type="monotone"
               dataKey="cantidad"
+              name="Cantidad de Barriles"
               stroke="#d4af37"
               strokeWidth={2}
               dot={{ fill: "#d4af37" }}
             />
-            <Line type="monotone" dataKey="capacidad" stroke="#666" strokeDasharray="5 5" />
+
+            {/* Capacidad total – naranjo punteado */}
+            <Line
+              type="monotone"
+              dataKey="capacidad"
+              name="Capacidad Total (L)"
+              stroke="#ff8c42"
+              strokeDasharray="5 5"
+              strokeWidth={2}
+              dot={{ fill: "#ff8c42" }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Tabla */}
+      {/* TABLA */}
       <div className="bg-card rounded-lg p-6 border border-border">
         <h2 className="text-xl font-semibold text-foreground mb-4">Estado de Barriles</h2>
 
@@ -354,7 +423,6 @@ export default function BarrelsPage() {
                       <td className="px-4 py-3 text-foreground">#{barrel.id}</td>
                       <td className="px-4 py-3 text-foreground">{barrel.codigo_interno}</td>
 
-                      {/* mini QR */}
                       <td className="px-4 py-3">
                         {barrel.codigo_qr ? (
                           <div className="bg-background p-1 rounded">
@@ -366,10 +434,15 @@ export default function BarrelsPage() {
                       </td>
 
                       <td className="px-4 py-3">
-                        <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 text-xs">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs ${getEstadoClasses(
+                            barrel.estado_actual
+                          )}`}
+                        >
                           {barrel.estado_actual}
                         </span>
                       </td>
+
                       <td className="px-4 py-3 text-foreground">{barrel.tipo_cerveza}</td>
                       <td className="px-4 py-3 text-foreground">{barrel.ubicacion_actual}</td>
 
@@ -388,7 +461,6 @@ export default function BarrelsPage() {
                       </td>
 
                       <td className="px-4 py-3 flex gap-2">
-                        {/* 🔹 nuevo botón ver */}
                         <button
                           className="p-2 hover:bg-secondary rounded text-foreground"
                           onClick={() => handleViewBarrel(barrel)}
@@ -402,6 +474,7 @@ export default function BarrelsPage() {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
+
                         <button
                           className="p-2 hover:bg-secondary rounded text-destructive"
                           onClick={() => handleClickDelete(barrel)}

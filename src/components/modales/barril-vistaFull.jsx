@@ -5,116 +5,116 @@ import QRCode from "react-qr-code"
 export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
   if (!isOpen || !barril) return null
 
-    const handlePrintQR = () => {
+  const handlePrintQR = () => {
     if (typeof window === "undefined" || !barril.codigo_qr) return
 
     const qrText = barril.codigo_qr
     const codigoInterno = barril.codigo_interno || ""
 
-    // Generar imagen QR
+    // Generar imagen QR para impresión
     const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(
-        qrText
+      qrText
     )}`
 
     const printWindow = window.open("", "_blank", "width=600,height=800")
-
     if (!printWindow) return
 
     printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
+      <!DOCTYPE html>
+      <html>
         <head>
-            <title>QR Barril ${barril.id}</title>
-            <style>
-            /* Eliminar encabezados/pies del navegador */
-            @page {
-                margin: 0;
-            }
-
+          <title>QR Barril ${barril.id}</title>
+          <style>
+            @page { margin: 0; }
             body {
-                margin: 0;
-                padding: 0;
-                display: flex;
-                flex-direction: column;
-                justify-content: flex-start;
-                align-items: center;
-                font-family: Arial, sans-serif;
-                background: white;
+              margin: 0;
+              padding: 0;
+              display: flex;
+              flex-direction: column;
+              justify-content: flex-start;
+              align-items: center;
+              font-family: Arial, sans-serif;
+              background: white;
             }
-
             .container {
-                width: 100%;
-                padding: 40px 20px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
+              width: 100%;
+              padding: 40px 20px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
             }
-
             h1 {
-                margin: 0 0 20px 0;
-                font-size: 20px;
-                font-weight: 700;
+              margin: 0 0 20px 0;
+              font-size: 20px;
+              font-weight: 700;
             }
-
             img {
-                margin: 20px 0;
-                width: 280px;
-                height: 280px;
+              margin: 20px 0;
+              width: 280px;
+              height: 280px;
             }
-
             .label {
-                margin-top: 10px;
-                font-size: 12px;
-                text-transform: uppercase;
-                color: #666;
+              margin-top: 10px;
+              font-size: 12px;
+              text-transform: uppercase;
+              color: #666;
             }
-
             .value {
-                font-size: 14px;
-                font-family: monospace;
-                margin-bottom: 10px;
-                color: #000;
+              font-size: 14px;
+              font-family: monospace;
+              margin-bottom: 10px;
+              color: #000;
             }
-
-            /* Quitar números de página */
             @media print {
-                body {
+              body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
-                }
-                footer, header {
+              }
+              footer, header {
                 display: none !important;
-                }
+              }
             }
-            </style>
+          </style>
         </head>
-
         <body>
-            <div class="container">
+          <div class="container">
             <h1>Barril #${barril.id}</h1>
             <img src="${qrImgUrl}" alt="QR" />
-
             <div class="label">Código Interno</div>
             <div class="value">${codigoInterno}</div>
-
             <div class="label">Código QR</div>
             <div class="value">${qrText}</div>
-            </div>
-
-            <script>
+          </div>
+          <script>
             window.onload = function() {
-                window.print();
-                setTimeout(() => window.close(), 200);
+              window.print();
+              setTimeout(() => window.close(), 200);
             }
-            </script>
+          </script>
         </body>
-        </html>
+      </html>
     `)
 
     printWindow.document.close()
-    }
+  }
 
+  const handleDownloadJPG = () => {
+    if (typeof window === "undefined" || !barril.codigo_qr) return
 
+    const qrText = barril.codigo_qr
+
+    // Usamos el mismo servicio, pero pidiendo JPG y tamaño grande
+    const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=jpg&data=${encodeURIComponent(
+      qrText
+    )}`
+
+    const link = document.createElement("a")
+    link.href = qrImgUrl
+    link.download = `QR_Barril_${barril.id}.jpg`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] animate-in fade-in">
@@ -211,13 +211,22 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
         {/* Footer con botones */}
         <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
           {barril.codigo_qr && (
-            <button
-              type="button"
-              onClick={handlePrintQR}
-              className="px-4 py-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground hover:opacity-90 text-sm"
-            >
-              Imprimir QR
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handlePrintQR}
+                className="px-4 py-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground hover:opacity-90 text-sm"
+              >
+                Imprimir QR
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadJPG}
+                className="px-4 py-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground hover:opacity-90 text-sm"
+              >
+                Descargar JPG
+              </button>
+            </>
           )}
           <button
             type="button"
