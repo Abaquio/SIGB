@@ -10,8 +10,30 @@ import lecturasQrRouter from './routes/lecturasQr.js';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// ─────────────────────────────────────────────
+// CORS
+// ─────────────────────────────────────────────
+const allowedOrigins = [
+  'http://localhost:5173',          // Front local (Vite)
+  'https://sigb-seven.vercel.app',  // Front en producción (Vercel)
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Requests sin origin (curl, Postman, etc.) → permitir
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn('❌ CORS bloqueado para origen:', origin);
+    return callback(new Error('Not allowed by CORS'));
+  },
+};
+
 // Middleware
-app.use(cors({ origin: 'http://localhost:5173' })); // ajusta si cambia el front
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(morgan('dev'));
 
