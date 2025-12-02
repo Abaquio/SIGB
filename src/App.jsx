@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useNavigate, useLocation } from "react-router-dom"
 
-// 👇 Importamos usando rutas relativas, según tu estructura de la captura
+// 👇 Importamos usando rutas relativas, según tu estructura
 import Layout from "./components/layout/layout"
 import Dashboard from "./components/dashboard/dashboard"
 
@@ -12,8 +13,75 @@ import ReportesPage from "./pages/reportes-page"
 import AlertasPage from "./pages/alertas-page"
 
 function App() {
-  const [activeNav, setActiveNav] = useState("inicio")
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Mapea path → clave de navegación
+  const pathToNav = (path) => {
+    switch (path) {
+      case "/":
+      case "/inicio":
+        return "inicio"
+      case "/barriles":
+        return "barriles"
+      case "/movimientos":
+        return "movimientos"
+      case "/escanear":
+        return "escanear"
+      case "/historial":
+        return "historial"
+      case "/reportes":
+        return "reportes"
+      case "/alertas":
+        return "alertas"
+      default:
+        return "inicio"
+    }
+  }
+
+  // Mapea clave de navegación → path
+  const navToPath = (nav) => {
+    switch (nav) {
+      case "inicio":
+        return "/inicio"
+      case "barriles":
+        return "/barriles"
+      case "movimientos":
+        return "/movimientos"
+      case "escanear":
+        return "/escanear"
+      case "historial":
+        return "/historial"
+      case "reportes":
+        return "/reportes"
+      case "alertas":
+        return "/alertas"
+      default:
+        return "/inicio"
+    }
+  }
+
+  // Estado inicial basado en la URL actual
+  const [activeNav, setActiveNav] = useState(() => pathToNav(location.pathname))
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Si la URL cambia (ej: usuario escribe /barriles), sincronizamos activeNav
+  useEffect(() => {
+    const nav = pathToNav(location.pathname)
+    if (nav !== activeNav) {
+      setActiveNav(nav)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
+
+  // Cada vez que cambie activeNav (por el sidebar), actualizamos la URL
+  useEffect(() => {
+    const path = navToPath(activeNav)
+    if (location.pathname !== path) {
+      navigate(path, { replace: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNav])
 
   const renderPage = () => {
     switch (activeNav) {
