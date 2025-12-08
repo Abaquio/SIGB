@@ -4,18 +4,20 @@ import { supabase } from "../supabaseClient.js";
 
 const router = Router();
 
-// =====================
-// Helpers para usuario / IP
-// =====================
+/* ======================================================================
+   HELPERS BÁSICOS: usuario, IP, auditoría general
+   ====================================================================== */
+
 function getUsuarioIdFromReq(req) {
-  // prioriza cabecera si la usas desde el front
+  // Si más adelante pasas el usuario por headers:
   const headerId = req.headers["x-user-id"] || req.headers["x-userid"];
   const parsedHeader = headerId ? Number(headerId) : null;
   if (Number.isFinite(parsedHeader)) return parsedHeader;
 
-  // o desde algún middleware de auth
+  // O desde un middleware de auth en req.user
   if (req.user && req.user.id) return Number(req.user.id);
 
+  // Por ahora, como no tienes login, dejamos null
   return null;
 }
 
@@ -30,13 +32,47 @@ function getClientInfo(req) {
   return { ip: rawIp, userAgent };
 }
 
-// =====================
-// Helpers para códigos
-// =====================
+// Auditoría GENERAL (tabla auditoria)
+async function registrarAuditoriaGeneral({
+  req,
+  accion, // 'CREAR' | 'ACTUALIZAR' | 'ELIMINAR'
+  entidadId,
+  datosAntes,
+  datosDespues,
+}) {
+  try {
+    const usuario_id = getUsuarioIdFromReq(req);
+    const { ip, userAgent } = getClientInfo(req);
+
+    const { error } = await supabase.from("auditoria").insert([
+      {
+        usuario_id: usuario_id ?? null,
+        modulo: "barriles",
+        accion,
+        entidad: "barriles",
+        entidad_id: entidadId ?? null,
+        datos_antes: datosAntes ?? null,
+        datos_despues: datosDespues ?? null,
+        ip,
+        user_agent: userAgent,
+      },
+    ]);
+
+    if (error) {
+      console.error("❌ Error creando registro en auditoria (barriles):", error);
+    }
+  } catch (err) {
+    console.error("❌ Error inesperado registrando auditoria general:", err);
+  }
+}
+
+/* ======================================================================
+   HELPERS DE CÓDIGOS
+   ====================================================================== */
+
 async function generateUniqueCodigoInterno() {
-  // intenta algunas veces hasta encontrar uno libre
   for (let i = 0; i < 5; i++) {
-    const code = `B-${Math.floor(100000 + Math.random() * 900000)}`; // B-123456
+    const code = `B-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const { data, error } = await supabase
       .from("barriles")
@@ -57,7 +93,7 @@ async function generateUniqueCodigoInterno() {
 
 async function generateUniqueCodigoQR() {
   for (let i = 0; i < 5; i++) {
-    const code = `QR-${Math.floor(100000 + Math.random() * 900000)}`; // QR-123456
+    const code = `QR-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const { data, error } = await supabase
       .from("barriles")
@@ -76,9 +112,10 @@ async function generateUniqueCodigoQR() {
   throw new Error("No se pudo generar un codigo_qr único");
 }
 
-// =====================
-// Helpers de catálogos
-// =====================
+/* ======================================================================
+   HELPERS DE CATÁLOGOS (categoría cerveza, bodega)
+   ====================================================================== */
+
 async function ensureCategoriaCerveza(nombre) {
   if (!nombre) return null;
 
@@ -144,11 +181,10 @@ async function ensureBodega(nombre) {
   return inserted.id;
 }
 
-// =====================
-// Normalizador para el front
-// =====================
-// - Agrega campo derivado `tipo_cerveza` usando categorias_cerveza.nombre
-// - Si ubicacion_actual viene null, usa bodegas.nombre
+/* ======================================================================
+   MAPPER PARA EL FRONT
+   ====================================================================== */
+
 function mapBarril(row) {
   const categoria = row.categorias_cerveza;
   const bodega = row.bodegas;
@@ -160,10 +196,16 @@ function mapBarril(row) {
   };
 }
 
-// =====================
-// Helper: registrar movimiento + auditoría
-// =====================
-async function registrarMovimientoConAuditoria(req, barrilRow, movimientoPayload) {
+/* ======================================================================
+   HELPER: registrar movimiento + auditoria_movimientos
+   ====================================================================== */
+
+async function registrarMovimientoConAuditoria(
+  req,
+  barrilRow,
+  movimientoPayload,
+  auditoriaAccion = "CREAR" // 👈 ahora parametrizable
+) {
   try {
     if (!barrilRow || !barrilRow.id) return;
 
@@ -182,6 +224,7 @@ async function registrarMovimientoConAuditoria(req, barrilRow, movimientoPayload
       observaciones: movimientoPayload.observaciones ?? null,
     };
 
+    // 1) Insert en movimientos
     const { data: mov, error: movError } = await supabase
       .from("movimientos")
       .insert([movimiento])
@@ -193,6 +236,7 @@ async function registrarMovimientoConAuditoria(req, barrilRow, movimientoPayload
       return;
     }
 
+    // 2) Insert en auditoria_movimientos
     const { error: audError } = await supabase
       .from("auditoria_movimientos")
       .insert([
@@ -200,7 +244,7 @@ async function registrarMovimientoConAuditoria(req, barrilRow, movimientoPayload
           usuario_id: usuario_id ?? null,
           movimiento_id: mov.id,
           barril_id: barrilRow.id,
-          accion: "CREAR",
+          accion: auditoriaAccion, // 👈 CREAR / ACTUALIZAR / ELIMINAR
           datos_antes: null,
           datos_despues: mov,
           ip,
@@ -216,9 +260,13 @@ async function registrarMovimientoConAuditoria(req, barrilRow, movimientoPayload
   }
 }
 
-// =====================
+/* ======================================================================
+   RUTAS
+   ====================================================================== */
+
+// ---------------------
 // GET /api/barriles
-// =====================
+// ---------------------
 router.get("/", async (_req, res, next) => {
   try {
     const { data, error } = await supabase
@@ -243,9 +291,9 @@ router.get("/", async (_req, res, next) => {
   }
 });
 
-// =====================
+// ---------------------
 // POST /api/barriles
-// =====================
+// ---------------------
 router.post("/", async (req, res, next) => {
   try {
     const { tipo_cerveza, capacidad_litros, estado_actual, ubicacion_actual } =
@@ -258,7 +306,6 @@ router.post("/", async (req, res, next) => {
     const codigo_interno = await generateUniqueCodigoInterno();
     const codigo_qr = await generateUniqueCodigoQR();
 
-    // Mapear nombre → categoria_cerveza_id / bodega_id
     const categoria_cerveza_id = await ensureCategoriaCerveza(tipo_cerveza);
     const bodega_id = ubicacion_actual
       ? await ensureBodega(ubicacion_actual)
@@ -291,7 +338,16 @@ router.post("/", async (req, res, next) => {
 
     const barrilNormalizado = mapBarril(data);
 
-    // Registrar movimiento de creación
+    // Auditoría general: CREAR
+    await registrarAuditoriaGeneral({
+      req,
+      accion: "CREAR",
+      entidadId: data.id,
+      datosAntes: null,
+      datosDespues: barrilNormalizado,
+    });
+
+    // Movimiento de creación (auditoriaAccion default = CREAR)
     await registrarMovimientoConAuditoria(req, data, {
       tipo_movimiento: "CREAR_BARRIL",
       ubicacion_origen: null,
@@ -308,9 +364,9 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// =====================
+// ---------------------
 // PUT /api/barriles/:id
-// =====================
+// ---------------------
 router.put("/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -318,7 +374,7 @@ router.put("/:id", async (req, res, next) => {
       return res.status(400).json({ error: "ID de barril inválido" });
     }
 
-    // Traer estado ANTES para detectar cambios
+    // Estado ANTES
     const { data: beforeRaw, error: beforeError } = await supabase
       .from("barriles")
       .select("*, categorias_cerveza(nombre), bodegas(nombre)")
@@ -342,14 +398,12 @@ router.put("/:id", async (req, res, next) => {
     const { tipo_cerveza, ubicacion_actual, ...rest } = req.body;
     const updateData = { ...rest };
 
-    // Si viene un tipo_cerveza nuevo, actualizamos categoria_cerveza_id
     if (tipo_cerveza !== undefined) {
       updateData.categoria_cerveza_id = await ensureCategoriaCerveza(
         tipo_cerveza
       );
     }
 
-    // Si viene una ubicación nueva, actualizamos ubicacion_actual y bodega_id
     if (ubicacion_actual !== undefined) {
       updateData.ubicacion_actual = ubicacion_actual;
       updateData.bodega_id = ubicacion_actual
@@ -357,7 +411,7 @@ router.put("/:id", async (req, res, next) => {
         : null;
     }
 
-    // Nunca dejamos editar códigos ni id desde el front
+    // No permitimos editar estos campos
     delete updateData.codigo_interno;
     delete updateData.codigo_qr;
     delete updateData.id;
@@ -379,7 +433,16 @@ router.put("/:id", async (req, res, next) => {
 
     const after = mapBarril(data);
 
-    // Detectar cambios relevantes para generar movimientos
+    // Auditoría general: ACTUALIZAR
+    await registrarAuditoriaGeneral({
+      req,
+      accion: "ACTUALIZAR",
+      entidadId: id,
+      datosAntes: before,
+      datosDespues: after,
+    });
+
+    // Detectar cambios para movimientos
     const movimientos = [];
 
     // 1) Cambio de ubicación / bodega
@@ -409,7 +472,7 @@ router.put("/:id", async (req, res, next) => {
       });
     }
 
-    // 3) Cambio de activo (por si lo manejas desde PUT)
+    // 3) Cambio de activo (si lo manejas por PUT)
     if (before.activo !== after.activo) {
       movimientos.push({
         tipo_movimiento: after.activo
@@ -423,9 +486,9 @@ router.put("/:id", async (req, res, next) => {
       });
     }
 
-    // Registrar todos los movimientos que correspondan
+    // Registrar movimientos con accion = ACTUALIZAR
     for (const mov of movimientos) {
-      await registrarMovimientoConAuditoria(req, data, mov);
+      await registrarMovimientoConAuditoria(req, data, mov, "ACTUALIZAR");
     }
 
     res.json(after);
@@ -435,9 +498,9 @@ router.put("/:id", async (req, res, next) => {
   }
 });
 
-// =====================
+// ---------------------
 // DELETE (soft) /api/barriles/:id
-// =====================
+// ---------------------
 router.delete("/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -445,7 +508,7 @@ router.delete("/:id", async (req, res, next) => {
       return res.status(400).json({ error: "ID de barril inválido" });
     }
 
-    // Traer estado ANTES
+    // Estado ANTES
     const { data: beforeRaw, error: beforeError } = await supabase
       .from("barriles")
       .select("*, categorias_cerveza(nombre), bodegas(nombre)")
@@ -466,7 +529,6 @@ router.delete("/:id", async (req, res, next) => {
 
     const before = mapBarril(beforeRaw);
 
-    // Soft delete: activo = false y marcamos estado_actual como ELIMINADO
     const { data, error } = await supabase
       .from("barriles")
       .update({
@@ -485,18 +547,33 @@ router.delete("/:id", async (req, res, next) => {
       });
     }
 
-    // Registrar movimiento de desactivación
-    await registrarMovimientoConAuditoria(req, data, {
-      tipo_movimiento: "DESACTIVAR_BARRIL",
-      ubicacion_origen: before.ubicacion_actual || null,
-      ubicacion_destino: null,
-      origen_bodega_id: beforeRaw.bodega_id ?? null,
-      destino_bodega_id: null,
-      observaciones:
-        "Barril marcado como inactivo (soft-delete) desde módulo de gestión.",
+    const after = mapBarril(data);
+
+    // Auditoría general: ELIMINAR (soft)
+    await registrarAuditoriaGeneral({
+      req,
+      accion: "ELIMINAR",
+      entidadId: id,
+      datosAntes: before,
+      datosDespues: after,
     });
 
-    // mantenemos 204 como antes (el front no espera body)
+    // Movimiento de desactivación → accion ELIMINAR
+    await registrarMovimientoConAuditoria(
+      req,
+      data,
+      {
+        tipo_movimiento: "DESACTIVAR_BARRIL",
+        ubicacion_origen: before.ubicacion_actual || null,
+        ubicacion_destino: null,
+        origen_bodega_id: beforeRaw.bodega_id ?? null,
+        destino_bodega_id: null,
+        observaciones:
+          "Barril marcado como inactivo (soft-delete) desde módulo de gestión.",
+      },
+      "ELIMINAR"
+    );
+
     res.status(204).send();
   } catch (err) {
     console.error("❌ Error al desactivar (soft-delete) barril:", err);

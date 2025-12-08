@@ -129,50 +129,49 @@ export default function BarrelsPage() {
   }
 
   // agregar barril
-const handleAddBarril = async (formData) => {
-  try {
-    const { id, codigo_interno, codigo_qr, ...payload } = formData
+  const handleAddBarril = async (formData) => {
+    try {
+      const { id, codigo_interno, codigo_qr, ...payload } = formData
 
-    const res = await fetch(`${API_BASE_URL}/api/barriles`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
+      const res = await fetch(`${API_BASE_URL}/api/barriles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
 
-    if (!res.ok) {
-      let info = null
-      try {
-        info = await res.json()
-      } catch {
+      if (!res.ok) {
+        let info = null
         try {
-          const text = await res.text()
-          console.error("Respuesta cruda backend /api/barriles:", text)
-        } catch (e) {
-          console.error("No se pudo leer el body del error:", e)
+          info = await res.json()
+        } catch {
+          try {
+            const text = await res.text()
+            console.error("Respuesta cruda backend /api/barriles:", text)
+          } catch (e) {
+            console.error("No se pudo leer el body del error:", e)
+          }
         }
+
+        console.error("❌ Error backend /api/barriles:", info)
+        const msg =
+          info?.details ||
+          info?.error ||
+          "No se pudo crear el barril (ver consola para más detalles)"
+
+        throw new Error(msg)
       }
 
-      console.error("❌ Error backend /api/barriles:", info)
-      const msg =
-        info?.details ||
-        info?.error ||
-        "No se pudo crear el barril (ver consola para más detalles)"
+      // si todo ok
+      setIsModalOpen(false)
+      await fetchBarrels()
 
-      throw new Error(msg)
+      setValidadoMessage("Barril agregado correctamente.")
+      setShowValidado(true)
+    } catch (err) {
+      console.error("Error al agregar barril:", err)
+      alert(err.message || "Error al agregar barril")
     }
-
-    // si todo ok
-    setIsModalOpen(false)
-    await fetchBarrels()
-
-    setValidadoMessage("Barril agregado correctamente.")
-    setShowValidado(true)
-  } catch (err) {
-    console.error("Error al agregar barril:", err)
-    alert(err.message || "Error al agregar barril")
   }
-}
-
 
   // preparar edición → abre confirm después de enviar desde el modal
   const handlePrepareEdit = (formData) => {
@@ -253,6 +252,13 @@ const handleAddBarril = async (formData) => {
   const chartDataRaw = buildChartData(barrels)
   const chartData = chartDataRaw.length > 0 ? chartDataRaw : barrelsDataDemo
 
+  // label para confirm de edición (evitar undefined)
+  const editLabel =
+    pendingEditData?.codigo_interno ||
+    selectedBarrel?.codigo_interno ||
+    pendingEditData?.tipo_cerveza ||
+    "sin código"
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
@@ -299,7 +305,7 @@ const handleAddBarril = async (formData) => {
         title="Guardar cambios"
         message={
           pendingEditData
-            ? `¿Deseas guardar los cambios del barril #${pendingEditData.id} (${pendingEditData.codigo_interno})?`
+            ? `¿Deseas guardar los cambios del barril #${pendingEditData.id} (${editLabel})?`
             : "¿Deseas guardar los cambios?"
         }
         confirmLabel="Guardar"
@@ -313,7 +319,7 @@ const handleAddBarril = async (formData) => {
         title="Eliminar barril"
         message={
           barrelToDelete
-            ? `¿Estás seguro de eliminar el barril #${barrelToDelete.id} (${barrelToDelete.codigo_interno})?`
+            ? `¿Estás seguro de eliminar el barril #${barrelToDelete.id} (${barrelToDelete.codigo_interno || "sin código"})?`
             : "¿Estás seguro de eliminar este barril?"
         }
         confirmLabel="Eliminar"

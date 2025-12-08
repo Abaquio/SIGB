@@ -10,7 +10,12 @@ const EMPTY_FORM = {
   activo: true,
 }
 
-export default function CrearBodegaModal({ isOpen, onClose, onSubmit, initialData = null }) {
+export default function CrearBodegaModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialData = null,
+}) {
   const [formData, setFormData] = useState(EMPTY_FORM)
 
   useEffect(() => {
@@ -30,17 +35,50 @@ export default function CrearBodegaModal({ isOpen, onClose, onSubmit, initialDat
 
   if (!isOpen) return null
 
+  // ==========================
+  // Helpers de sanitización
+  // ==========================
+  const normalizeSpaces = (str) => str.replace(/\s+/g, " ").trim()
+
+  // Solo letras + espacios (nombre)
+  const filterNombreChars = (str) =>
+    str.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]/g, "")
+
+  // Letras, números, espacios y símbolos básicos (dirección)
+  const filterDireccionChars = (str) =>
+    str.replace(/[^A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ #.,-]/g, "")
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
+    let newValue = value
+
+    if (name === "nombre") {
+      // aquí solo filtramos caracteres, NO hacemos trim ni quitamos dobles espacios
+      newValue = filterNombreChars(value)
+    }
+
+    if (name === "direccion") {
+      newValue = filterDireccionChars(value)
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === "checkbox" ? checked : newValue,
     }))
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSubmit(formData)
+
+    const payload = {
+      ...formData,
+      nombre: normalizeSpaces(filterNombreChars(formData.nombre)),
+      direccion: formData.direccion
+        ? normalizeSpaces(filterDireccionChars(formData.direccion))
+        : "",
+    }
+
+    onSubmit(payload)
   }
 
   return (
@@ -104,7 +142,7 @@ export default function CrearBodegaModal({ isOpen, onClose, onSubmit, initialDat
               name="direccion"
               value={formData.direccion}
               onChange={handleChange}
-              placeholder="Ej: Zona Centro, calle X..."
+              placeholder="Ej: Calle 123, Bodega Sur..."
               className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-sidebar-primary"
             />
           </div>
@@ -152,7 +190,7 @@ export default function CrearBodegaModal({ isOpen, onClose, onSubmit, initialDat
               type="submit"
               className="flex-1 px-4 py-2 bg-sidebar-primary text-sidebar-primary-foreground rounded-lg hover:opacity-90 transition-all font-medium"
             >
-              {initialData ? "Guardar cambios" : "Crear Bodega"}
+              {initialData ? "Guardar Cambios" : "Crear Bodega"}
             </button>
           </div>
         </form>

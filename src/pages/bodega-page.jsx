@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Eye } from "lucide-react"
+import { Eye, Edit } from "lucide-react"
 import CrearBodegaModal from "../components/modales/crearBodega-modal"
 import ValidadoCard from "../components/ui/validado"
 import BodegaVistaFull from "../components/modales/bodega-vistaFull"
@@ -14,8 +14,14 @@ export default function BodegaPage() {
   const [error, setError] = useState(null)
 
   const [showCrearModal, setShowCrearModal] = useState(false)
+
+  // modal detalle
   const [showDetalleModal, setShowDetalleModal] = useState(false)
   const [bodegaSeleccionada, setBodegaSeleccionada] = useState(null)
+
+  // modal editar
+  const [showEditarModal, setShowEditarModal] = useState(false)
+  const [bodegaEditando, setBodegaEditando] = useState(null)
 
   // validado (toast)
   const [showValidado, setShowValidado] = useState(false)
@@ -83,6 +89,44 @@ export default function BodegaPage() {
   }
 
   // =========================
+  // Editar bodega
+  // =========================
+  const handleOpenEditar = (bodega) => {
+    setBodegaEditando(bodega)
+    setShowEditarModal(true)
+  }
+
+  const handleEditarBodega = async (formData) => {
+    if (!bodegaEditando?.id) return
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/bodegas/${bodegaEditando.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+
+      if (!res.ok) {
+        const info = await res.json().catch(() => null)
+        throw new Error(
+          info?.details || info?.error || "No se pudo actualizar la bodega",
+        )
+      }
+
+      setShowEditarModal(false)
+      setBodegaEditando(null)
+      await fetchBodegas()
+
+      setValidadoTitle("Bodega actualizada")
+      setValidadoMessage("Los cambios de la bodega se guardaron correctamente.")
+      setShowValidado(true)
+    } catch (err) {
+      console.error("Error al actualizar bodega:", err)
+      alert(err.message || "Error al actualizar bodega")
+    }
+  }
+
+  // =========================
   // Ver detalle
   // =========================
   const handleVerDetalle = (bodega) => {
@@ -104,20 +148,22 @@ export default function BodegaPage() {
       : null
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Bodegas</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+            Bodegas
+          </h1>
           <p className="text-muted-foreground mt-1">
             Gestiona tus bodegas de almacenamiento
           </p>
         </div>
         <button
           onClick={handleOpenCrear}
-          className="flex items-center gap-2 bg-sidebar-primary text-sidebar-primary-foreground px-6 py-3 rounded-lg hover:opacity-90 transition-all"
+          className="self-start md:self-auto flex items-center gap-2 bg-sidebar-primary text-sidebar-primary-foreground px-4 md:px-6 py-2.5 md:py-3 rounded-lg hover:opacity-90 transition-all text-sm md:text-base"
         >
-          <span className="text-xl">➕</span>
+          <span className="text-lg md:text-xl">➕</span>
           Nueva Bodega
         </button>
       </div>
@@ -129,6 +175,17 @@ export default function BodegaPage() {
         onSubmit={handleCrearBodega}
       />
 
+      {/* Modal editar */}
+      <CrearBodegaModal
+        isOpen={showEditarModal}
+        onClose={() => {
+          setShowEditarModal(false)
+          setBodegaEditando(null)
+        }}
+        onSubmit={handleEditarBodega}
+        initialData={bodegaEditando}
+      />
+
       {/* Toast validado */}
       <ValidadoCard
         open={showValidado}
@@ -138,25 +195,35 @@ export default function BodegaPage() {
       />
 
       {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-muted-foreground text-sm">Total Bodegas</p>
-          <p className="text-3xl font-bold text-foreground">{totalBodegas}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="bg-card border border-border rounded-lg p-3 md:p-4">
+          <p className="text-muted-foreground text-xs md:text-sm">
+            Total Bodegas
+          </p>
+          <p className="text-2xl md:text-3xl font-bold text-foreground">
+            {totalBodegas}
+          </p>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-muted-foreground text-sm">Activas</p>
-          <p className="text-3xl font-bold text-emerald-400">{bodegasActivas}</p>
+        <div className="bg-card border border-border rounded-lg p-3 md:p-4">
+          <p className="text-muted-foreground text-xs md:text-sm">Activas</p>
+          <p className="text-2xl md:text-3xl font-bold text-emerald-400">
+            {bodegasActivas}
+          </p>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-muted-foreground text-sm">Inactivas</p>
-          <p className="text-3xl font-bold text-amber-400">{bodegasInactivas}</p>
+        <div className="bg-card border border-border rounded-lg p-3 md:p-4">
+          <p className="text-muted-foreground text-xs md:text-sm">Inactivas</p>
+          <p className="text-2xl md:text-3xl font-bold text-amber-400">
+            {bodegasInactivas}
+          </p>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <p className="text-muted-foreground text-sm">Última creada</p>
-          <p className="text-base font-semibold text-foreground">
+        <div className="bg-card border border-border rounded-lg p-3 md:p-4">
+          <p className="text-muted-foreground text-xs md:text-sm">
+            Última creada
+          </p>
+          <p className="text-sm md:text-base font-semibold text-foreground truncate">
             {ultimaCreada ? ultimaCreada.nombre : "—"}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[10px] md:text-xs text-muted-foreground">
             {ultimaCreada
               ? new Date(ultimaCreada.created_at).toLocaleString()
               : "Sin registros"}
@@ -164,107 +231,122 @@ export default function BodegaPage() {
         </div>
       </div>
 
-      {/* Tabla de bodegas */}
+      {/* Tabla de bodegas (RESPONSIVA) */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted border-b border-border">
-            <tr>
-              <th className="px-6 py-4 text-left font-semibold text-foreground">
-                Nombre
-              </th>
-              <th className="px-6 py-4 text-left font-semibold text-foreground">
-                Tipo
-              </th>
-              <th className="px-6 py-4 text-left font-semibold text-foreground">
-                Dirección
-              </th>
-              <th className="px-6 py-4 text-left font-semibold text-foreground">
-                Estado
-              </th>
-              <th className="px-6 py-4 text-left font-semibold text-foreground">
-                Fecha creación
-              </th>
-              <th className="px-6 py-4 text-center font-semibold text-foreground">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
+        <div className="w-full overflow-x-auto">
+          <table className="min-w-full text-xs sm:text-sm">
+            <thead className="bg-muted border-b border-border">
               <tr>
-                <td
-                  colSpan={6}
-                  className="px-6 py-4 text-center text-muted-foreground"
-                >
-                  Cargando bodegas...
-                </td>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left font-semibold text-foreground">
+                  Nombre
+                </th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left font-semibold text-foreground">
+                  Tipo
+                </th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left font-semibold text-foreground">
+                  Dirección
+                </th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left font-semibold text-foreground">
+                  Estado
+                </th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left font-semibold text-foreground">
+                  Fecha creación
+                </th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-center font-semibold text-foreground">
+                  Acciones
+                </th>
               </tr>
-            )}
-
-            {!loading && error && (
-              <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-red-500">
-                  {error}
-                </td>
-              </tr>
-            )}
-
-            {!loading && !error && bodegas.length === 0 && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-6 py-4 text-center text-muted-foreground"
-                >
-                  No hay bodegas registradas.
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              !error &&
-              bodegas.map((bodega) => (
-                <tr
-                  key={bodega.id}
-                  className="border-b border-border hover:bg-muted/50 transition-colors"
-                >
-                  <td className="px-6 py-4 text-foreground font-medium">
-                    {bodega.nombre}
-                  </td>
-                  <td className="px-6 py-4 text-foreground">{bodega.tipo}</td>
-                  <td className="px-6 py-4 text-foreground">
-                    {bodega.direccion || "—"}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        bodega.activo
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : "bg-zinc-500/20 text-zinc-300"
-                      }`}
-                    >
-                      {bodega.activo ? "Activa" : "Inactiva"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-foreground">
-                    {new Date(bodega.created_at).toLocaleString()}
-                  </td>
-                  {/* ACCIONES: solo ojo */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center">
-                      <button
-                        type="button"
-                        onClick={() => handleVerDetalle(bodega)}
-                        className="p-2 rounded hover:bg-secondary text-foreground"
-                        title="Ver detalles"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 sm:px-6 py-4 text-center text-muted-foreground"
+                  >
+                    Cargando bodegas...
                   </td>
                 </tr>
-              ))}
-          </tbody>
-        </table>
+              )}
+
+              {!loading && error && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 sm:px-6 py-4 text-center text-red-500"
+                  >
+                    {error}
+                  </td>
+                </tr>
+              )}
+
+              {!loading && !error && bodegas.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 sm:px-6 py-4 text-center text-muted-foreground"
+                  >
+                    No hay bodegas registradas.
+                  </td>
+                </tr>
+              )}
+
+              {!loading &&
+                !error &&
+                bodegas.map((bodega) => (
+                  <tr
+                    key={bodega.id}
+                    className="border-b border-border hover:bg-muted/50 transition-colors"
+                  >
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-foreground font-medium">
+                      {bodega.nombre}
+                    </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-foreground">
+                      {bodega.tipo}
+                    </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-foreground max-w-xs truncate">
+                      {bodega.direccion || "—"}
+                    </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4">
+                      <span
+                        className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-medium whitespace-nowrap ${
+                          bodega.activo
+                            ? "bg-emerald-500/15 text-emerald-400"
+                            : "bg-zinc-500/20 text-zinc-300"
+                        }`}
+                      >
+                        {bodega.activo ? "Activa" : "Inactiva"}
+                      </span>
+                    </td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-foreground whitespace-nowrap">
+                      {new Date(bodega.created_at).toLocaleString()}
+                    </td>
+                    {/* ACCIONES: ver + editar */}
+                    <td className="px-4 sm:px-6 py-3 sm:py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleVerDetalle(bodega)}
+                          className="p-2 rounded hover:bg-secondary text-foreground"
+                          title="Ver detalles"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditar(bodega)}
+                          className="p-2 rounded hover:bg-secondary text-foreground"
+                          title="Editar bodega"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Modal Ver Detalle (bodega + barriles, con select de estado y guardar) */}
