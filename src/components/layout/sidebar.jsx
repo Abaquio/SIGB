@@ -3,6 +3,7 @@
 const navItems = [
   { id: "inicio", label: "Inicio", emoji: "🏠" },
   { id: "barriles", label: "Barriles", emoji: "🛢️" },
+  { id: "bodegas", label: "Bodegas", emoji: "🏬" }, // 👈 nuevo
   { id: "movimientos", label: "Movimientos", emoji: "📊" },
   { id: "escanear", label: "Escanear QR", emoji: "📱" },
   { id: "historial", label: "Historial", emoji: "📜" },

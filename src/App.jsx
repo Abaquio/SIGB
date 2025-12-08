@@ -11,6 +11,7 @@ import EscanearPage from "./pages/escanear-page"
 import HistorialPage from "./pages/historial-page"
 import ReportesPage from "./pages/reportes-page"
 import AlertasPage from "./pages/alertas-page"
+import BodegaPage from "./pages/bodega-page" // 👈 NUEVO
 
 function App() {
   const navigate = useNavigate()
@@ -24,6 +25,8 @@ function App() {
         return "inicio"
       case "/barriles":
         return "barriles"
+      case "/bodegas":            // 👈 NUEVO
+        return "bodegas"
       case "/movimientos":
         return "movimientos"
       case "/escanear":
@@ -46,6 +49,8 @@ function App() {
         return "/inicio"
       case "barriles":
         return "/barriles"
+      case "bodegas":            // 👈 NUEVO
+        return "/bodegas"
       case "movimientos":
         return "/movimientos"
       case "escanear":
@@ -116,6 +121,8 @@ function App() {
     switch (activeNav) {
       case "barriles":
         return <BarrelsPage />
+      case "bodegas":             // 👈 NUEVO
+        return <BodegaPage />
       case "movimientos":
         return <MovimientosPage />
       case "escanear":

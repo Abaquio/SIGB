@@ -10,19 +10,7 @@ const EMPTY_FORM = {
   ubicacion_actual: "",
 }
 
-// Variedades sugeridas
-const BEER_TYPES = [
-  "IPA",
-  "Lager",
-  "Stout",
-  "Pilsner",
-  "Porter",
-  "Trigo",
-  "Amber Ale",
-  "Pale Ale",
-  "Blonde Ale",
-  "NEIPA",
-]
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000"
 
 export default function AgregarBarrilModal({
   isOpen,
@@ -32,18 +20,49 @@ export default function AgregarBarrilModal({
   onSubmit,
 }) {
   const isEdit = mode === "edit"
-  const [formData, setFormData] = useState(EMPTY_FORM)
 
+  const [formData, setFormData] = useState(EMPTY_FORM)
+  const [beerTypes, setBeerTypes] = useState([])
+  const [bodegas, setBodegas] = useState([])
+  const [loadingCatalogos, setLoadingCatalogos] = useState(false)
+
+  // Cargar catálogos desde la API cuando se abre el modal
   useEffect(() => {
     if (!isOpen) return
+
+    const loadCatalogos = async () => {
+      setLoadingCatalogos(true)
+      try {
+        const [resCats, resBods] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/categorias-cerveza`),
+          fetch(`${API_BASE_URL}/api/bodegas`),
+        ])
+
+        const cats = resCats.ok ? await resCats.json() : []
+        const bods = resBods.ok ? await resBods.json() : []
+
+        setBeerTypes(cats || [])
+        setBodegas(bods || [])
+      } catch (err) {
+        console.error("❌ Error cargando catálogos:", err)
+      } finally {
+        setLoadingCatalogos(false)
+      }
+    }
+
+    loadCatalogos()
 
     if (isEdit && initialBarril) {
       setFormData({
         id: initialBarril.id,
-        tipo_cerveza: initialBarril.tipo_cerveza || "",
+        tipo_cerveza:
+          initialBarril.tipo_cerveza ||
+          initialBarril.categorias_cerveza?.nombre ||
+          "",
         capacidad_litros: Number(initialBarril.capacidad_litros) || 50,
         estado_actual: initialBarril.estado_actual || "DISPONIBLE",
-        ubicacion_actual: initialBarril.ubicacion_actual || "",
+        ubicacion_actual:
+          initialBarril.ubicacion_actual || initialBarril.bodegas?.nombre || "",
         codigo_interno: initialBarril.codigo_interno,
         codigo_qr: initialBarril.codigo_qr,
       })
@@ -52,33 +71,8 @@ export default function AgregarBarrilModal({
     }
   }, [isOpen, isEdit, initialBarril])
 
-  // -------------------------
-  // VALIDACIONES DE CAMPOS
-  // -------------------------
   const handleChange = (e) => {
     const { name, value } = e.target
-
-    // Solo letras y espacios para tipo_cerveza (aunque ahora viene de un select)
-    if (name === "tipo_cerveza") {
-      const soloLetras = value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]/g, "")
-      setFormData((prev) => ({
-        ...prev,
-        tipo_cerveza: soloLetras,
-      }))
-      return
-    }
-
-    // Solo letras, números y espacios para ubicacion_actual
-    if (name === "ubicacion_actual") {
-      const limpio = value.replace(/[^A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ\s]/g, "")
-      setFormData((prev) => ({
-        ...prev,
-        ubicacion_actual: limpio,
-      }))
-      return
-    }
-
-    // Capacidad numérica
     setFormData((prev) => ({
       ...prev,
       [name]: name === "capacidad_litros" ? Number(value) : value,
@@ -88,11 +82,7 @@ export default function AgregarBarrilModal({
   const handleSubmit = (e) => {
     e.preventDefault()
 
-    if (!onSubmit) return
-
     const payload = { ...formData }
-
-    // los códigos no deben enviarse desde el front
     delete payload.codigo_interno
     delete payload.codigo_qr
 
@@ -101,10 +91,14 @@ export default function AgregarBarrilModal({
 
   if (!isOpen) return null
 
-  // Para soportar tipos antiguos que no estén en la lista, agregamos la opción dinámica
-  const hasCustomBeerType =
+  // Para evitar que en edición se pierda el valor si no está en la lista
+  const hasTipoInList =
     formData.tipo_cerveza &&
-    !BEER_TYPES.includes(formData.tipo_cerveza)
+    beerTypes.some((c) => c.nombre === formData.tipo_cerveza)
+
+  const hasBodegaInList =
+    formData.ubicacion_actual &&
+    bodegas.some((b) => b.nombre === formData.ubicacion_actual)
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in">
@@ -117,13 +111,13 @@ export default function AgregarBarrilModal({
           </h2>
           <button
             onClick={onClose}
-            className="text-foreground hover:text-accent text-2xl"
+            className="text-foreground hover:text-accent text-2xl leading-none"
           >
             ×
           </button>
         </div>
 
-        {/* QR (solo en editar) */}
+        {/* QR SOLO EN EDICIÓN */}
         {isEdit && formData.codigo_qr && (
           <div className="mb-5 flex items-center gap-4">
             <div className="bg-background p-3 rounded-lg border border-border">
@@ -149,8 +143,7 @@ export default function AgregarBarrilModal({
 
         {/* FORM */}
         <form onSubmit={handleSubmit} className="space-y-4">
-
-          {/* Tipo cerveza (select) */}
+          {/* Tipo de cerveza */}
           <div>
             <label className="block text-foreground text-sm font-medium mb-2">
               Tipo de Cerveza
@@ -162,17 +155,22 @@ export default function AgregarBarrilModal({
               className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground"
               required
             >
-              <option value="">Selecciona un tipo</option>
-              {BEER_TYPES.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipo}
-                </option>
-              ))}
-              {hasCustomBeerType && (
+              <option value="">
+                {loadingCatalogos ? "Cargando..." : "Selecciona un tipo"}
+              </option>
+
+              {/* opción de edición si no está en la lista */}
+              {isEdit && formData.tipo_cerveza && !hasTipoInList && (
                 <option value={formData.tipo_cerveza}>
-                  {formData.tipo_cerveza}
+                  {formData.tipo_cerveza} (actual)
                 </option>
               )}
+
+              {beerTypes.map((cat) => (
+                <option key={cat.id} value={cat.nombre}>
+                  {cat.nombre}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -203,28 +201,42 @@ export default function AgregarBarrilModal({
               className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground"
             >
               <option value="DISPONIBLE">Disponible</option>
-              <option value="EN_USO">En uso</option>
+              <option value="EN_USO">En Uso</option>
               <option value="LIMPIEZA">Limpieza</option>
               <option value="MANTENIMIENTO">Mantenimiento</option>
             </select>
           </div>
 
-          {/* Ubicación */}
+          {/* Ubicación / Bodega */}
           <div>
             <label className="block text-foreground text-sm font-medium mb-2">
-              Ubicación
+              Ubicación (Bodega)
             </label>
-            <input
-              type="text"
+            <select
               name="ubicacion_actual"
               value={formData.ubicacion_actual}
               onChange={handleChange}
-              placeholder="Bodega 1, Cámara 2..."
               className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground"
-            />
+            >
+              <option value="">
+                {loadingCatalogos ? "Cargando..." : "Selecciona una bodega"}
+              </option>
+
+              {isEdit && formData.ubicacion_actual && !hasBodegaInList && (
+                <option value={formData.ubicacion_actual}>
+                  {formData.ubicacion_actual} (actual)
+                </option>
+              )}
+
+              {bodegas.map((b) => (
+                <option key={b.id} value={b.nombre}>
+                  {b.nombre}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* BOTONES */}
+          {/* Botones */}
           <div className="flex gap-3 pt-4">
             <button
               type="button"
@@ -237,7 +249,7 @@ export default function AgregarBarrilModal({
               type="submit"
               className="flex-1 px-4 py-2 bg-sidebar-primary text-sidebar-primary-foreground rounded-lg hover:opacity-90"
             >
-              {isEdit ? "Guardar cambios" : "Agregar Barril"}
+              {isEdit ? "Guardar Cambios" : "Agregar Barril"}
             </button>
           </div>
         </form>

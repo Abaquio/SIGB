@@ -54,26 +54,28 @@ function buildChartData(barrels) {
   return Array.from(map.values())
 }
 
-// Colores para la pill del estado
-const getEstadoClasses = (estado) => {
+// Clases para estado
+function getEstadoClasses(estado) {
   switch (estado) {
     case "DISPONIBLE":
-      return "bg-green-500/20 text-green-400"
-    case "LIMPIEZA":
-      return "bg-blue-500/20 text-blue-400"
-    case "MANTENIMIENTO":
-      return "bg-yellow-500/20 text-yellow-400"
+      return "bg-emerald-500/20 text-emerald-400"
     case "EN_USO":
       return "bg-orange-500/20 text-orange-400"
+    case "LIMPIEZA":
+      return "bg-sky-500/20 text-sky-400"
+    case "MANTENIMIENTO":
+      return "bg-amber-500/20 text-amber-400"
     default:
       return "bg-gray-500/20 text-gray-400"
   }
 }
 
-// Para la barra de capacidad: si tiene capacidad > 0, se ve llena (100%)
+// Para la barra de capacidad
 const getCapacidadPercent = (capacidad) => {
   const cap = Number(capacidad) || 0
-  return cap > 0 ? 100 : 0
+  if (cap <= 0) return 0
+  // aquí podrías normalizar si tuvieras rango máximo, por ahora 100% siempre que tenga valor
+  return 100
 }
 
 export default function BarrelsPage() {
@@ -101,8 +103,10 @@ export default function BarrelsPage() {
     try {
       setLoading(true)
       setError(null)
+
       const res = await fetch(`${API_BASE_URL}/api/barriles`)
-      if (!res.ok) throw new Error("No se pudieron obtener los barriles")
+      if (!res.ok) throw new Error("Error en la respuesta de la API")
+
       const data = await res.json()
       setBarrels(data || [])
     } catch (err) {
@@ -125,46 +129,60 @@ export default function BarrelsPage() {
   }
 
   // agregar barril
-  const handleAddBarril = async (formData) => {
-    try {
-      const { id, codigo_interno, codigo_qr, ...payload } = formData
+const handleAddBarril = async (formData) => {
+  try {
+    const { id, codigo_interno, codigo_qr, ...payload } = formData
 
-      const res = await fetch(`${API_BASE_URL}/api/barriles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
+    const res = await fetch(`${API_BASE_URL}/api/barriles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
 
-      if (!res.ok) throw new Error("No se pudo crear el barril")
+    if (!res.ok) {
+      let info = null
+      try {
+        info = await res.json()
+      } catch {
+        try {
+          const text = await res.text()
+          console.error("Respuesta cruda backend /api/barriles:", text)
+        } catch (e) {
+          console.error("No se pudo leer el body del error:", e)
+        }
+      }
 
-      setIsModalOpen(false)
-      await fetchBarrels()
-      setValidadoMessage("Barril agregado correctamente.")
-      setShowValidado(true)
-    } catch (err) {
-      console.error(err)
-      alert("Error al agregar barril")
+      console.error("❌ Error backend /api/barriles:", info)
+      const msg =
+        info?.details ||
+        info?.error ||
+        "No se pudo crear el barril (ver consola para más detalles)"
+
+      throw new Error(msg)
     }
-  }
 
-  // editar barril
-  const handleClickEdit = (barrel) => {
-    setModalMode("edit")
-    setSelectedBarrel(barrel)
-    setIsModalOpen(true)
-  }
+    // si todo ok
+    setIsModalOpen(false)
+    await fetchBarrels()
 
+    setValidadoMessage("Barril agregado correctamente.")
+    setShowValidado(true)
+  } catch (err) {
+    console.error("Error al agregar barril:", err)
+    alert(err.message || "Error al agregar barril")
+  }
+}
+
+
+  // preparar edición → abre confirm después de enviar desde el modal
   const handlePrepareEdit = (formData) => {
     setPendingEditData(formData)
-    setIsModalOpen(false)
     setConfirmEditOpen(true)
   }
 
+  // confirmar edición
   const handleConfirmEdit = async () => {
-    if (!pendingEditData || !pendingEditData.id) {
-      setConfirmEditOpen(false)
-      return
-    }
+    if (!pendingEditData) return
 
     try {
       const { id, codigo_interno, codigo_qr, ...updateData } = pendingEditData
@@ -178,11 +196,11 @@ export default function BarrelsPage() {
       if (!res.ok) throw new Error("No se pudo actualizar el barril")
 
       setConfirmEditOpen(false)
-      setPendingEditData(null)
+      setIsModalOpen(false)
       setSelectedBarrel(null)
+      setPendingEditData(null)
 
       await fetchBarrels()
-
       setValidadoMessage(`Barril #${id} actualizado correctamente.`)
       setShowValidado(true)
     } catch (err) {
@@ -192,17 +210,15 @@ export default function BarrelsPage() {
     }
   }
 
-  // eliminar barril
+  // abrir confirmación de borrado
   const handleClickDelete = (barrel) => {
     setBarrelToDelete(barrel)
     setConfirmDeleteOpen(true)
   }
 
+  // confirmar borrado
   const handleConfirmDelete = async () => {
-    if (!barrelToDelete) {
-      setConfirmDeleteOpen(false)
-      return
-    }
+    if (!barrelToDelete) return
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/barriles/${barrelToDelete.id}`, {
@@ -255,7 +271,7 @@ export default function BarrelsPage() {
         </button>
       </div>
 
-      {/* modal agregar/editar */}
+      {/* MODAL AGREGAR / EDITAR */}
       <AgregarBarrilModal
         isOpen={isModalOpen}
         onClose={() => {
@@ -267,7 +283,7 @@ export default function BarrelsPage() {
         onSubmit={modalMode === "create" ? handleAddBarril : handlePrepareEdit}
       />
 
-      {/* modal vista full */}
+      {/* MODAL VISTA FULL */}
       <BarrilVistaFullModal
         isOpen={viewModalOpen}
         onClose={() => {
@@ -319,87 +335,84 @@ export default function BarrelsPage() {
 
       {/* GRAFICO */}
       <div className="bg-card rounded-lg p-6 border border-border">
-        <h2 className="text-xl font-semibold text-foreground mb-4">
-          Evolución por Tipo de Cerveza
+        <h2 className="text-xl font-semibold mb-4 text-foreground">
+          Resumen por tipo de cerveza
         </h2>
-        <p className="text-xs text-muted-foreground mb-2">
-          Cantidad de barriles y capacidad total por tipo de cerveza.
-        </p>
-
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-            <XAxis dataKey="name" stroke="#888" />
-            <YAxis stroke="#888" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#1a1a1a",
-                border: "1px solid #d4af37",
-              }}
-              formatter={(value, name) => {
-                if (name === "capacidad") return [`${value} L`, "Capacidad Total"]
-                if (name === "cantidad") return [value, "Cantidad de Barriles"]
-                return [value, name]
-              }}
-              labelFormatter={(label) => `Tipo: ${label}`}
-            />
-            <Legend />
-
-            {/* Cantidad de barriles – dorado */}
-            <Line
-              type="monotone"
-              dataKey="cantidad"
-              name="Cantidad de Barriles"
-              stroke="#d4af37"
-              strokeWidth={2}
-              dot={{ fill: "#d4af37" }}
-            />
-
-            {/* Capacidad total – naranjo punteado */}
-            <Line
-              type="monotone"
-              dataKey="capacidad"
-              name="Capacidad Total (L)"
-              stroke="#ff8c42"
-              strokeDasharray="5 5"
-              strokeWidth={2}
-              dot={{ fill: "#ff8c42" }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <XAxis dataKey="name" stroke="#888" />
+              <YAxis stroke="#888" />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="cantidad"
+                name="Cantidad de barriles"
+                stroke="#facc15"
+              />
+              <Line
+                type="monotone"
+                dataKey="capacidad"
+                name="Capacidad total (L)"
+                stroke="#22c55e"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* TABLA */}
-      <div className="bg-card rounded-lg p-6 border border-border">
-        <h2 className="text-xl font-semibold text-foreground mb-4">Estado de Barriles</h2>
-
+      <div className="bg-card border border-border rounded-lg">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 text-left text-accent font-semibold">ID</th>
-                <th className="px-4 py-3 text-left text-accent font-semibold">Código</th>
-                <th className="px-4 py-3 text-left text-accent font-semibold">QR</th>
-                <th className="px-4 py-3 text-left text-accent font-semibold">Estado</th>
-                <th className="px-4 py-3 text-left text-accent font-semibold">Tipo</th>
-                <th className="px-4 py-3 text-left text-accent font-semibold">Ubicación</th>
-                <th className="px-4 py-3 text-left text-accent font-semibold">Capacidad</th>
-                <th className="px-4 py-3 text-left text-accent font-semibold">Acciones</th>
+          <table className="min-w-full text-sm">
+            <thead className="bg-secondary">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  #
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  Código interno
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  QR
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  Estado
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  Tipo de cerveza
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  Ubicación actual
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  Capacidad
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                  Acciones
+                </th>
               </tr>
             </thead>
-
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-4 text-center text-muted-foreground">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-4 text-center text-muted-foreground"
+                  >
                     Cargando barriles...
                   </td>
                 </tr>
               )}
 
-              {error && !loading && (
+              {!loading && error && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-4 text-center text-destructive">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-4 text-center text-red-500"
+                  >
                     {error}
                   </td>
                 </tr>
@@ -407,7 +420,10 @@ export default function BarrelsPage() {
 
               {!loading && !error && barrels.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-4 text-center text-muted-foreground">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-4 text-center text-muted-foreground"
+                  >
                     No hay barriles registrados.
                   </td>
                 </tr>
@@ -419,9 +435,16 @@ export default function BarrelsPage() {
                   const capPercent = getCapacidadPercent(barrel.capacidad_litros)
 
                   return (
-                    <tr key={barrel.id} className="border-b border-border hover:bg-secondary">
-                      <td className="px-4 py-3 text-foreground">#{barrel.id}</td>
-                      <td className="px-4 py-3 text-foreground">{barrel.codigo_interno}</td>
+                    <tr
+                      key={barrel.id}
+                      className="border-b border-border hover:bg-secondary"
+                    >
+                      <td className="px-4 py-3 text-foreground">
+                        #{barrel.id}
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {barrel.codigo_interno}
+                      </td>
 
                       <td className="px-4 py-3">
                         {barrel.codigo_qr ? (
@@ -429,7 +452,9 @@ export default function BarrelsPage() {
                             <QRCode value={barrel.codigo_qr} size={40} />
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Sin QR</span>
+                          <span className="text-xs text-muted-foreground">
+                            Sin QR
+                          </span>
                         )}
                       </td>
 
@@ -443,8 +468,13 @@ export default function BarrelsPage() {
                         </span>
                       </td>
 
-                      <td className="px-4 py-3 text-foreground">{barrel.tipo_cerveza}</td>
-                      <td className="px-4 py-3 text-foreground">{barrel.ubicacion_actual}</td>
+                      <td className="px-4 py-3 text-foreground">
+                        {barrel.tipo_cerveza || "—"}
+                      </td>
+
+                      <td className="px-4 py-3 text-foreground">
+                        {barrel.ubicacion_actual || "—"}
+                      </td>
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -469,14 +499,18 @@ export default function BarrelsPage() {
                         </button>
 
                         <button
-                          className="p-2 hover:bg-secondary rounded text-accent"
-                          onClick={() => handleClickEdit(barrel)}
+                          className="p-2 hover:bg-secondary rounded text-foreground"
+                          onClick={() => {
+                            setModalMode("edit")
+                            setSelectedBarrel(barrel)
+                            setIsModalOpen(true)
+                          }}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
 
                         <button
-                          className="p-2 hover:bg-secondary rounded text-destructive"
+                          className="p-2 hover:bg-red-600/10 rounded text-red-500 hover:text-red-400"
                           onClick={() => handleClickDelete(barrel)}
                         >
                           <Trash2 className="w-4 h-4" />
