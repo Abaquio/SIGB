@@ -1,11 +1,45 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import PerfilVistaFull from "../modales/perfilVista-full"
 
-export default function TopBar({ sidebarOpen, setSidebarOpen }) {
+export default function TopBar({ sidebarOpen, setSidebarOpen, onLogout }) {
   const [showMenu, setShowMenu] = useState(false)
   const [showPerfilModal, setShowPerfilModal] = useState(false)
+  const [userName, setUserName] = useState("Usuario")
+  const [userInitial, setUserInitial] = useState("T")
+
+  const navigate = useNavigate()
+
+  // Leer usuario desde localStorage para mostrar nombre e inicial
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("usuario")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+
+        const nombre =
+          parsed?.nombre_completo ||
+          parsed?.nombre ||
+          parsed?.username ||
+          parsed?.user ||
+          "Usuario"
+
+        setUserName(nombre)
+
+        const inicial =
+          (nombre && nombre.trim().charAt(0).toUpperCase()) || "U"
+        setUserInitial(inicial)
+      } else {
+        setUserName("Usuario")
+        setUserInitial("T")
+      }
+    } catch {
+      setUserName("Usuario")
+      setUserInitial("T")
+    }
+  }, [])
 
   const handleToggleMenu = () => {
     setShowMenu((prev) => !prev)
@@ -18,6 +52,24 @@ export default function TopBar({ sidebarOpen, setSidebarOpen }) {
 
   const handleClosePerfil = () => {
     setShowPerfilModal(false)
+  }
+
+  const handleLogout = () => {
+    setShowMenu(false)
+
+    // Preferimos que App maneje la sesión
+    if (typeof onLogout === "function") {
+      onLogout()
+      return
+    }
+
+    // Fallback por si no se pasa onLogout
+    try {
+      localStorage.removeItem("usuario")
+    } catch (e) {
+      // ignore
+    }
+    navigate("/login", { replace: true })
   }
 
   return (
@@ -46,10 +98,12 @@ export default function TopBar({ sidebarOpen, setSidebarOpen }) {
           {/* Info rápida usuario (avatar + texto) */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-secondary border border-border rounded-full">
             <div className="w-8 h-8 rounded-full bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center text-sm font-semibold">
-              T
+              {userInitial}
             </div>
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-medium text-foreground">Usuario</span>
+              <span className="text-sm font-medium text-foreground">
+                {userName}
+              </span>
               <span className="text-[11px] text-foreground/60">Sesión activa</span>
             </div>
           </div>
@@ -69,11 +123,13 @@ export default function TopBar({ sidebarOpen, setSidebarOpen }) {
                 <button
                   onClick={handleVerPerfil}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors"
+                  type="button"
                 >
                   <span>👤</span>
                   <span>Ver perfil</span>
                 </button>
                 <button
+                  onClick={handleLogout}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-secondary transition-colors"
                   type="button"
                 >

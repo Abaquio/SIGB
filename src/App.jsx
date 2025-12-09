@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 
-// Layout y páginas
 import Layout from "./components/layout/layout"
 import Dashboard from "./components/dashboard/dashboard"
 
@@ -15,155 +14,105 @@ import BodegaPage from "./pages/bodega-page"
 import POSPage from "./pages/pos-page"
 import DevolucionPage from "./pages/devolucion-page"
 import StaffPage from "./pages/staff-page"
+import LoginPage from "./pages/login"
 
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  // URL -> id de nav
-  const pathToNav = (path) => {
-    switch (path) {
-      case "/":
-      case "/inicio":
-        return "inicio"
-      case "/pos":
-        return "pos"
-      case "/devoluciones":
-        return "devoluciones"
-      case "/barriles":
-        return "barriles"
-      case "/bodegas":
-        return "bodegas"
-      case "/movimientos":
-        return "movimientos"
-      case "/escanear":
-        return "escanear"
-      case "/historial":
-        return "historial"
-      case "/reportes":
-        return "reportes"
-      case "/alertas":
-        return "alertas"
-      case "/staff":
-        return "staff"
-      default:
-        return "inicio"
-    }
-  }
-
-  // id de nav -> URL
-  const navToPath = (nav) => {
-    switch (nav) {
-      case "inicio":
-        return "/inicio"
-      case "pos":
-        return "/pos"
-      case "devoluciones":
-        return "/devoluciones"
-      case "barriles":
-        return "/barriles"
-      case "bodegas":
-        return "/bodegas"
-      case "movimientos":
-        return "/movimientos"
-      case "escanear":
-        return "/escanear"
-      case "historial":
-        return "/historial"
-      case "reportes":
-        return "/reportes"
-      case "alertas":
-        return "/alertas"
-      case "staff":
-        return "/staff"
-      default:
-        return "/inicio"
-    }
-  }
-
-  // Estado inicial según URL
-  const [activeNav, setActiveNav] = useState(() => pathToNav(location.pathname))
-
-  // Sidebar responsivo
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window === "undefined") return true
-    return window.innerWidth >= 768
+  // Estado REAL de sesión
+  const [usuario, setUsuario] = useState(() => {
+    const saved = localStorage.getItem("usuario")
+    return saved ? JSON.parse(saved) : null
   })
 
-  // Cuando cambia la URL (por escribir a mano, etc.), sincronizamos el nav
-  useEffect(() => {
-    const nav = pathToNav(location.pathname)
-    if (nav !== activeNav) {
-      setActiveNav(nav)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname])
+  // Función que Topbar debe usar cuando hace logout
+  const handleLogout = () => {
+    localStorage.removeItem("usuario")
+    setUsuario(null)
+    navigate("/login", { replace: true })
+  }
 
-  // Cuando cambia el nav desde el sidebar, navegamos a la ruta correspondiente
-  useEffect(() => {
-    const path = navToPath(activeNav)
-    if (location.pathname !== path) {
-      navigate(path, { replace: false })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeNav])
+  // Rutas protegidas
+  const protectedPaths = [
+    "/",
+    "/inicio",
+    "/pos",
+    "/devoluciones",
+    "/barriles",
+    "/bodegas",
+    "/movimientos",
+    "/escanear",
+    "/historial",
+    "/reportes",
+    "/alertas",
+    "/staff",
+  ]
 
-  // En mobile, al cambiar de sección se cierra el sidebar
+  // 🔐 PROTECCIÓN DE RUTAS
   useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setSidebarOpen(false)
-    }
-  }, [activeNav])
+    const path = location.pathname
+    const isProtected = protectedPaths.includes(path)
 
-  // Listener de resize para manejar el sidebar en desktop/mobile
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 768) {
-        setSidebarOpen(true)
-      } else {
-        setSidebarOpen(false)
+    // Si NO está logueado → SOLO permitir /login
+    if (!usuario) {
+      if (path !== "/login") {
+        navigate("/login", { replace: true })
       }
+      return
     }
 
-    handleResize()
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
+    // Si está logueado e intenta ir a /login → mandarlo al inicio
+    if (usuario && path === "/login") {
+      navigate("/inicio", { replace: true })
+      return
+    }
 
+    // Si está logueado pero ruta NO existe → mandarlo al inicio
+    if (!isProtected) {
+      navigate("/inicio", { replace: true })
+    }
+  }, [usuario, location.pathname, navigate])
+
+  // Detectar qué página renderizar
   const renderPage = () => {
-    switch (activeNav) {
-      case "pos":
+    switch (location.pathname) {
+      case "/inicio":
+      case "/":
+        return <Dashboard />
+      case "/pos":
         return <POSPage />
-      case "devoluciones":
+      case "/devoluciones":
         return <DevolucionPage />
-      case "barriles":
+      case "/barriles":
         return <BarrelsPage />
-      case "bodegas":
+      case "/bodegas":
         return <BodegaPage />
-      case "movimientos":
+      case "/movimientos":
         return <MovimientosPage />
-      case "escanear":
+      case "/escanear":
         return <EscanearPage />
-      case "historial":
+      case "/historial":
         return <HistorialPage />
-      case "reportes":
+      case "/reportes":
         return <ReportesPage />
-      case "alertas":
+      case "/alertas":
         return <AlertasPage />
-      case "staff":
+      case "/staff":
         return <StaffPage />
       default:
         return <Dashboard />
     }
   }
 
+  // Si no hay usuario → mostrar solo login
+  if (!usuario) {
+    return <LoginPage setUsuario={setUsuario} />
+  }
+
+  // Si hay usuario → mostrar layout y páginas
   return (
-    <Layout
-      activeNav={activeNav}
-      setActiveNav={setActiveNav}
-      sidebarOpen={sidebarOpen}
-      setSidebarOpen={setSidebarOpen}
-    >
+    <Layout onLogout={handleLogout}>
       {renderPage()}
     </Layout>
   )
