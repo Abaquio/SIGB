@@ -3,12 +3,12 @@
 const navItems = [
   { id: "inicio", label: "Inicio", emoji: "🏠" },
   { id: "barriles", label: "Barriles", emoji: "🛢️" },
+  { id: "escanear", label: "Escanear QR", emoji: "📱" },  
   { id: "bodegas", label: "Bodegas", emoji: "🏬" }, // 👈 nuevo
   { id: "movimientos", label: "Movimientos", emoji: "📊" },
-  { id: "escanear", label: "Escanear QR", emoji: "📱" },
-  { id: "historial", label: "Historial", emoji: "📜" },
+  //{ id: "historial", label: "Historial", emoji: "📜" },
   { id: "reportes", label: "Reportes", emoji: "📈" },
-  { id: "alertas", label: "Alertas", emoji: "🚨" },
+  //{ id: "alertas", label: "Alertas", emoji: "🚨" },
 ]
 
 export default function Sidebar({
