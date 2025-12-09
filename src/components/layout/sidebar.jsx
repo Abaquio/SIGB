@@ -2,6 +2,8 @@
 
 const navItems = [
   { id: "inicio", label: "Inicio", emoji: "🏠" },
+  { id: "pos", label: "Ventas (POS)", emoji: "💳" },
+  { id: "devoluciones", label: "Devoluciones", emoji: "↩️" },
   { id: "barriles", label: "Barriles", emoji: "🛢️" },
   { id: "escanear", label: "Escanear QR", emoji: "📱" },  
   { id: "bodegas", label: "Bodegas", emoji: "🏬" }, // 👈 nuevo
