@@ -9,10 +9,11 @@ export default function Layout({
   setActiveNav,
   sidebarOpen,
   setSidebarOpen,
+  onLogout, // opcional, por si App.jsx lo pasa
 }) {
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar (responsivo) */}
+      {/* SIDEBAR */}
       {sidebarOpen && (
         <Sidebar
           activeNav={activeNav}
@@ -22,9 +23,14 @@ export default function Layout({
         />
       )}
 
-      {/* Columna derecha: TopBar arriba + contenido abajo */}
+      {/* CONTENIDO PRINCIPAL */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        <TopBar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          onLogout={onLogout}
+        />
+
         <main className="flex-1 overflow-auto bg-gradient-to-br from-background to-slate-900 p-8">
           {children}
         </main>

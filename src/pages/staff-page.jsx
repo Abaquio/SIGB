@@ -236,8 +236,8 @@ export default function StaffPage() {
                               : "bg-red-500/20 text-red-500"
                           }`}
                         >
-                          {miembro.estado.charAt(0).toUpperCase() +
-                            miembro.estado.slice(1)}
+                          {(miembro.estado || "desconocido").charAt(0).toUpperCase() +
+                            (miembro.estado || "desconocido").slice(1)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm">

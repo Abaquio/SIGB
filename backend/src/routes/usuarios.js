@@ -10,7 +10,7 @@ router.get("/", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("usuarios")
-      .select("id,nombre_completo,email,rut,rol,activo,created_at,rol_id")
+      .select("id,nombre_completo,email,rut,rol,activo,created_at,rol_id,telefono")
       .order("created_at", { ascending: true })
 
     if (error) {
@@ -28,7 +28,7 @@ router.get("/", async (req, res) => {
 // POST /api/usuarios  -> crea un nuevo usuario con password hasheada
 router.post("/", async (req, res) => {
   try {
-    const { nombre_completo, email, rut, rol_id, password } = req.body
+    const { nombre_completo, email, rut, rol_id, password, telefono } = req.body
 
     if (!nombre_completo || !rut || !rol_id) {
       return res
@@ -105,16 +105,18 @@ router.post("/", async (req, res) => {
       rol_id: rolRow.id,
       activo: true,
       password: passwordHash,
+      telefono: telefono || null,
     }
 
     const { data, error } = await supabase
       .from("usuarios")
       .insert([payload])
-      .select("id,nombre_completo,email,rut,rol,activo,created_at,rol_id")
+      .select(
+        "id,nombre_completo,email,rut,rol,activo,created_at,rol_id,telefono"
+      )
       .single()
 
     if (error) {
-      // Por si hay constraint UNIQUE en la BD
       if (error.code === "23505") {
         return res.status(400).json({
           error:
@@ -137,13 +139,14 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id)
-    const { nombre_completo, email, rut, rol_id, activo } = req.body
+    const { nombre_completo, email, rut, rol_id, activo, telefono } = req.body
 
     const updates = {
       ...(nombre_completo !== undefined && { nombre_completo }),
       ...(email !== undefined && { email }),
       ...(rut !== undefined && { rut }),
       ...(activo !== undefined && { activo }),
+      ...(telefono !== undefined && { telefono }),
     }
 
     if (rol_id) {
@@ -170,7 +173,9 @@ router.put("/:id", async (req, res) => {
       .from("usuarios")
       .update(updates)
       .eq("id", id)
-      .select("id,nombre_completo,email,rut,rol,activo,created_at,rol_id")
+      .select(
+        "id,nombre_completo,email,rut,rol,activo,created_at,rol_id,telefono"
+      )
       .single()
 
     if (error) {
