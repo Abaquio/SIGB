@@ -70,12 +70,14 @@ function getEstadoClasses(estado) {
   }
 }
 
-// Para la barra de capacidad
-const getCapacidadPercent = (capacidad) => {
+// Porcentaje de litros restantes respecto a la capacidad total
+const getCapacidadPercent = (capacidad, litrosRestantes) => {
   const cap = Number(capacidad) || 0
+  const rest = Number(litrosRestantes) || 0
   if (cap <= 0) return 0
-  // aquí podrías normalizar si tuvieras rango máximo, por ahora 100% siempre que tenga valor
-  return 100
+
+  const percent = (rest / cap) * 100
+  return Math.max(0, Math.min(100, percent))
 }
 
 export default function BarrelsPage() {
@@ -394,7 +396,7 @@ export default function BarrelsPage() {
                   Ubicación actual
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
-                  Capacidad
+                  Capacidad / Litros
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
                   Acciones
@@ -438,7 +440,11 @@ export default function BarrelsPage() {
               {!loading &&
                 !error &&
                 barrels.map((barrel) => {
-                  const capPercent = getCapacidadPercent(barrel.capacidad_litros)
+                  const capPercent = getCapacidadPercent(
+                    barrel.capacidad_litros,
+                    barrel.litros_restantes
+                  )
+                  const isLowLevel = capPercent <= 15
 
                   return (
                     <tr
@@ -483,16 +489,25 @@ export default function BarrelsPage() {
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 bg-secondary rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-sidebar-primary to-accent"
-                              style={{ width: `${capPercent}%` }}
-                            />
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 h-2 bg-secondary rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-sidebar-primary to-accent"
+                                style={{ width: `${capPercent}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {barrel.litros_restantes} /{" "}
+                              {barrel.capacidad_litros} L
+                            </span>
                           </div>
-                          <span className="text-xs text-muted-foreground">
-                            {barrel.capacidad_litros} L
-                          </span>
+
+                          {isLowLevel && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 uppercase tracking-wide">
+                              Bajo nivel
+                            </span>
+                          )}
                         </div>
                       </td>
 

@@ -8,6 +8,13 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
 
   if (!isOpen || !barril) return null
 
+  // Cálculos de capacidad / litros restantes para la barra
+  const capacidad = Number(barril.capacidad_litros) || 0
+  const litrosRestantes = Number(barril.litros_restantes) || 0
+  const percent =
+    capacidad > 0 ? Math.max(0, Math.min(100, (litrosRestantes / capacidad) * 100)) : 0
+  const isLowLevel = percent <= 15
+
   const handlePrintQR = () => {
     if (typeof window === "undefined" || !barril.codigo_qr) return
 
@@ -209,10 +216,18 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Capacidad (L)</p>
+              <p className="text-xs text-muted-foreground">Capacidad total</p>
               <p className="text-sm sm:text-base text-foreground">
                 {barril.capacidad_litros != null
                   ? `${barril.capacidad_litros} L`
+                  : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Litros restantes</p>
+              <p className="text-sm sm:text-base text-foreground">
+                {barril.litros_restantes != null
+                  ? `${barril.litros_restantes} L`
                   : "—"}
               </p>
             </div>
@@ -244,6 +259,27 @@ export default function BarrilVistaFullModal({ isOpen, onClose, barril }) {
                 </p>
               </div>
             )}
+
+            {/* Nivel del barril */}
+            <div className="sm:col-span-2 mt-1">
+              <p className="text-xs text-muted-foreground">Nivel del barril</p>
+              <div className="w-full h-3 bg-secondary rounded-full overflow-hidden mt-1">
+                <div
+                  className="h-full bg-gradient-to-r from-sidebar-primary to-accent"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <p className="text-[10px] text-muted-foreground">
+                  {litrosRestantes} / {capacidad} L ({percent.toFixed(0)}%)
+                </p>
+                {isLowLevel && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 uppercase tracking-wide">
+                    Bajo nivel
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

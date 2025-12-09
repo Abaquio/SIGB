@@ -128,6 +128,104 @@ async function registrarMovimientoDevolucion(
   }
 }
 
+// Suma litros a un barril (para devoluciones en LITROS)
+async function sumarLitrosABarril(barrilId, litrosDevueltos) {
+  try {
+    const litros = Number(litrosDevueltos) || 0
+    if (!barrilId || litros <= 0) return
+
+    const { data: barril, error: barrilError } = await supabase
+      .from("barriles")
+      .select("id, capacidad_litros, litros_restantes, estado_actual")
+      .eq("id", barrilId)
+      .maybeSingle()
+
+    if (barrilError) {
+      console.error("⚠️ Error obteniendo barril para sumar litros:", barrilError)
+      return
+    }
+
+    if (!barril) return
+
+    const capacidad = Number(barril.capacidad_litros) || 0
+    const actuales =
+      Number(
+        barril.litros_restantes !== null
+          ? barril.litros_restantes
+          : capacidad || 0
+      ) || 0
+
+    let nuevos = actuales + litros
+    if (capacidad > 0 && nuevos > capacidad) {
+      nuevos = capacidad
+    }
+
+    const updatePayload = { litros_restantes: nuevos }
+    if (nuevos > 0 && barril.estado_actual === "AGOTADO") {
+      updatePayload.estado_actual = "DISPONIBLE"
+    }
+
+    const { error: updError } = await supabase
+      .from("barriles")
+      .update(updatePayload)
+      .eq("id", barrilId)
+
+    if (updError) {
+      console.error(
+        "⚠️ Error actualizando litros_restantes en devolución:",
+        updError
+      )
+    }
+  } catch (err) {
+    console.error("❌ Error inesperado en sumarLitrosABarril:", err)
+  }
+}
+
+// Rellena un barril completo (para devoluciones por BARRIL)
+async function rellenarBarrilDesdeDevolucion(barrilId) {
+  try {
+    if (!barrilId) return
+
+    const { data: barril, error: barrilError } = await supabase
+      .from("barriles")
+      .select("id, capacidad_litros")
+      .eq("id", barrilId)
+      .maybeSingle()
+
+    if (barrilError) {
+      console.error(
+        "⚠️ Error obteniendo barril para rellenar desde devolución:",
+        barrilError
+      )
+      return
+    }
+
+    if (!barril) return
+
+    const capacidad = Number(barril.capacidad_litros) || 0
+
+    const { error: updError } = await supabase
+      .from("barriles")
+      .update({
+        litros_restantes: capacidad,
+        estado_actual: "DISPONIBLE",
+      })
+      .eq("id", barrilId)
+
+    if (updError) {
+      console.error(
+        "⚠️ Error actualizando barril (rellenar desde devolución):",
+        updError
+      )
+    }
+  } catch (err) {
+    console.error(
+      "❌ Error inesperado en rellenarBarrilDesdeDevolucion:",
+      err
+    )
+  }
+}
+
 /* ======================================================================
    RUTAS
    ====================================================================== */
@@ -210,20 +308,6 @@ router.get("/:id", async (req, res, next) => {
 
 /**
  * POST /api/devoluciones
- *
- * Body esperado (ejemplo):
- * {
- *   venta_id: 1 | null,
- *   cliente_id: 1 | null,
- *   tipo_devolucion: 'CLIENTE',
- *   motivo: 'Producto defectuoso',
- *   observaciones: 'Barril con fuga',
- *   bodega_id_retorno: 1,
- *   items: [
- *     { barril_id: 10, cantidad: 1, unidad: 'BARRIL', monto_linea: 45000 },
- *     ...
- *   ]
- * }
  */
 router.post("/", async (req, res, next) => {
   try {
@@ -309,7 +393,7 @@ router.post("/", async (req, res, next) => {
       })
     }
 
-    // 3) Registrar movimientos (entrada de stock por devolución)
+    // 3) Registrar movimientos (entrada de stock por devolución) + actualizar litros
     for (const item of detalleItems) {
       await registrarMovimientoDevolucion(req, item.barril_id, devolucionId, {
         tipo_movimiento: "DEVOLUCION_CLIENTE",
@@ -319,6 +403,13 @@ router.post("/", async (req, res, next) => {
         ubicacion_destino: null,
         observaciones: `Devolución ${tipoDev} por motivo: ${motivo || ""}`.trim(),
       })
+
+      // Ajustar stock de litros_restantes
+      if (item.unidad === "LITRO") {
+        await sumarLitrosABarril(item.barril_id, item.cantidad)
+      } else if (item.unidad === "BARRIL") {
+        await rellenarBarrilDesdeDevolucion(item.barril_id)
+      }
     }
 
     // 4) Auditoría general

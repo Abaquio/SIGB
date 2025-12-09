@@ -3,6 +3,7 @@
 const navItems = [
   { id: "inicio", label: "Inicio", emoji: "🏠" },
   { id: "pos", label: "Ventas (POS)", emoji: "💳" },
+  { id: "historial-ventas", label: "Historial Ventas", emoji: "📈" },
   { id: "devoluciones", label: "Devoluciones", emoji: "↩️" },
   { id: "barriles", label: "Barriles", emoji: "🛢️" },
   { id: "escanear", label: "Escanear QR", emoji: "📱" },  
@@ -10,6 +11,7 @@ const navItems = [
   { id: "movimientos", label: "Movimientos", emoji: "📊" },
   //{ id: "historial", label: "Historial", emoji: "📜" },
   { id: "reportes", label: "Reportes", emoji: "📈" },
+  { id: "staff", label: "Staff", emoji: "👨‍💼" },
   //{ id: "alertas", label: "Alertas", emoji: "🚨" },
 ]
 

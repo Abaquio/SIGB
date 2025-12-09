@@ -1,40 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import DevolucionModal from "../components/modales/devolucion-modal"
 
-const mockDevoluciones = [
-  {
-    id: 1,
-    numeroRecibo: "8432",
-    barril: "Pilsner Premium",
-    cantidad: 2,
-    motivo: "Producto defectuoso",
-    fecha: "2024-01-15",
-    monto: 90000,
-    estado: "Completada",
-  },
-  {
-    id: 2,
-    numeroRecibo: "8431",
-    barril: "IPA Fuerte",
-    cantidad: 1,
-    motivo: "Cliente no satisfecho",
-    fecha: "2024-01-14",
-    monto: 50000,
-    estado: "Completada",
-  },
-  {
-    id: 3,
-    numeroRecibo: "8430",
-    barril: "Stout Oscura",
-    cantidad: 1,
-    motivo: "Vencimiento próximo",
-    fecha: "2024-01-13",
-    monto: 52000,
-    estado: "Pendiente",
-  },
-]
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000"
 
 const motivosDevoluciones = [
   "Producto defectuoso",
@@ -46,59 +15,40 @@ const motivosDevoluciones = [
 ]
 
 export default function DevolucionPage() {
-  const [devoluciones, setDevoluciones] = useState(mockDevoluciones)
+  const [devoluciones, setDevoluciones] = useState([])
   const [showModal, setShowModal] = useState(false)
-  const [formData, setFormData] = useState({
-    numeroRecibo: "",
-    barril: "",
-    cantidad: 1,
-    motivo: "",
-    monto: 0,
-  })
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target
-    setFormData({
-      ...formData,
-      [name]:
-        name === "cantidad"
-          ? Number.parseInt(value) || 1
-          : name === "monto"
-          ? Number.parseInt(value) || 0
-          : value,
-    })
+  const cargarDevoluciones = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/devoluciones`)
+      if (!res.ok) {
+        console.error("Error HTTP al cargar devoluciones", await res.text())
+        return
+      }
+      const data = await res.json()
+      setDevoluciones(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error("❌ Error cargando devoluciones:", err)
+    }
   }
 
-  const handleCrearDevolucion = () => {
-    if (!formData.numeroRecibo || !formData.barril || !formData.motivo || formData.monto === 0) {
-      alert("Por favor completa todos los campos")
-      return
-    }
-
-    const nuevaDevolucion = {
-      id: Math.max(...devoluciones.map((d) => d.id), 0) + 1,
-      ...formData,
-      fecha: new Date().toISOString().split("T")[0],
-      estado: "Completada",
-    }
-
-    setDevoluciones([nuevaDevolucion, ...devoluciones])
-    setFormData({
-      numeroRecibo: "",
-      barril: "",
-      cantidad: 1,
-      motivo: "",
-      monto: 0,
-    })
-    setShowModal(false)
-    alert("Devolución registrada exitosamente")
-  }
+  useEffect(() => {
+    cargarDevoluciones()
+  }, [])
 
   const totalDevuelto = devoluciones
-    .filter((d) => d.estado === "Completada")
-    .reduce((sum, d) => sum + d.monto, 0)
+    .filter((d) => d.estado !== "ANULADA")
+    .reduce((sum, d) => sum + (Number(d.monto_total) || 0), 0)
 
-  const devolucionesPendientes = devoluciones.filter((d) => d.estado === "Pendiente").length
+  const devolucionesPendientes = devoluciones.filter(
+    (d) => d.estado === "REGISTRADA"
+  ).length
+
+  const handleDevolucionCreada = () => {
+    // Re-carga la lista desde el backend para mantener todo consistente
+    cargarDevoluciones()
+    setShowModal(false)
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-6">
@@ -129,7 +79,9 @@ export default function DevolucionPage() {
         <div className="bg-card rounded-lg p-6 border border-border">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-sm text-foreground/70">Devoluciones Registradas</p>
+              <p className="text-sm text-foreground/70">
+                Devoluciones Registradas
+              </p>
               <p className="text-2xl font-bold text-foreground">
                 {devoluciones.length}
               </p>
@@ -171,7 +123,7 @@ export default function DevolucionPage() {
                   Recibo
                 </th>
                 <th className="px-6 py-3 text-left font-semibold text-foreground">
-                  Barril
+                  Detalle
                 </th>
                 <th className="px-6 py-3 text-left font-semibold text-foreground">
                   Cantidad
@@ -191,42 +143,67 @@ export default function DevolucionPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {devoluciones.map((devolucion) => (
-                <tr
-                  key={devolucion.id}
-                  className="hover:bg-secondary/50 transition-colors"
-                >
-                  <td className="px-6 py-4 text-foreground font-medium">
-                    #{devolucion.numeroRecibo}
-                  </td>
-                  <td className="px-6 py-4 text-foreground">
-                    {devolucion.barril}
-                  </td>
-                  <td className="px-6 py-4 text-foreground">
-                    {devolucion.cantidad}
-                  </td>
-                  <td className="px-6 py-4 text-foreground/70 text-sm">
-                    {devolucion.motivo}
-                  </td>
-                  <td className="px-6 py-4 text-foreground/70 text-sm">
-                    {devolucion.fecha}
-                  </td>
-                  <td className="px-6 py-4 text-sidebar-primary font-semibold">
-                    ${devolucion.monto.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        devolucion.estado === "Completada"
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-yellow-500/20 text-yellow-400"
-                      }`}
-                    >
-                      {devolucion.estado}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {devoluciones.map((devolucion) => {
+                const items = devolucion.devolucion_detalle || []
+                const itemsCount = items.length
+                const cantidadTotal = items.reduce(
+                  (sum, it) => sum + (Number(it.cantidad) || 0),
+                  0
+                )
+                const fecha = devolucion.fecha_hora
+                  ? new Date(devolucion.fecha_hora).toLocaleDateString("es-CL")
+                  : "-"
+                const numeroRecibo =
+                  devolucion.ventas?.numero_documento ||
+                  devolucion.numero_documento ||
+                  devolucion.numeroRecibo ||
+                  "-"
+                const monto = Number(devolucion.monto_total) || 0
+                const estadoTexto = devolucion.estado || "REGISTRADA"
+                const esCompletada =
+                  estadoTexto === "PROCESADA" || estadoTexto === "REGISTRADA"
+
+                return (
+                  <tr
+                    key={devolucion.id}
+                    className="hover:bg-secondary/50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-foreground font-medium">
+                      #{numeroRecibo}
+                    </td>
+                    <td className="px-6 py-4 text-foreground">
+                      {itemsCount === 0
+                        ? "Sin detalle"
+                        : itemsCount === 1
+                        ? "1 ítem"
+                        : `${itemsCount} ítems`}
+                    </td>
+                    <td className="px-6 py-4 text-foreground">
+                      {cantidadTotal}
+                    </td>
+                    <td className="px-6 py-4 text-foreground/70 text-sm">
+                      {devolucion.motivo || "—"}
+                    </td>
+                    <td className="px-6 py-4 text-foreground/70 text-sm">
+                      {fecha}
+                    </td>
+                    <td className="px-6 py-4 text-sidebar-primary font-semibold">
+                      ${monto.toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          esCompletada
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-yellow-500/20 text-yellow-400"
+                        }`}
+                      >
+                        {estadoTexto}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -235,11 +212,9 @@ export default function DevolucionPage() {
       {/* Modal Nueva Devolución */}
       <DevolucionModal
         show={showModal}
-        formData={formData}
         motivosDevoluciones={motivosDevoluciones}
-        onInputChange={handleInputChange}
         onClose={() => setShowModal(false)}
-        onSave={handleCrearDevolucion}
+        onCreated={handleDevolucionCreada}
       />
     </div>
   )

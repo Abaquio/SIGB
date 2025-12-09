@@ -259,6 +259,247 @@ router.get("/siguiente-numero", async (req, res) => {
 })
 
 /**
+ * GENERAR BOLETA PDF: GET /api/ventas/pdf/:id
+ */
+router.get("/pdf/:id", async (req, res) => {
+  try {
+    const ventaId = Number(req.params.id);
+    if (!ventaId) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    // 1) OBTENER VENTA
+    const { data: venta, error: errorVenta } = await supabase
+      .from("ventas")
+      .select("*, clientes(nombre,rut), bodegas(nombre)")
+      .eq("id", ventaId)
+      .maybeSingle();
+
+    if (errorVenta) {
+      console.error("Error obteniendo venta:", errorVenta);
+      return res.status(500).json({ error: "Error obteniendo venta" });
+    }
+
+    if (!venta) {
+      return res.status(404).json({ error: "Venta no encontrada" });
+    }
+
+    // 2) OBTENER DETALLE
+    const { data: detalle, error: errorDetalle } = await supabase
+      .from("venta_detalle")
+      .select("*")
+      .eq("venta_id", ventaId);
+
+    if (errorDetalle) {
+      console.error("Error obteniendo detalle:", errorDetalle);
+      return res.status(500).json({ error: "Error obteniendo detalle" });
+    }
+
+    // 3) OBTENER BARRILES
+    const barrilIds = [
+      ...new Set(detalle.map((d) => d.barril_id).filter(Boolean)),
+    ];
+
+    let barrilesMap = {};
+    if (barrilIds.length > 0) {
+      const { data: barriles, error: errorBarriles } = await supabase
+        .from("barriles")
+        .select("id, codigo_interno, tipo_cerveza")
+        .in("id", barrilIds);
+
+      if (errorBarriles) {
+        console.error("Error obteniendo barriles:", errorBarriles);
+      } else {
+        barrilesMap = (barriles || []).reduce((acc, b) => {
+          acc[b.id] = b;
+          return acc;
+        }, {});
+      }
+    }
+
+    // ============ INICIO PDF ============
+    const doc = new PDFDocument({ margin: 40 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="boleta_${ventaId}.pdf"`
+    );
+
+    doc.pipe(res);
+
+    // ENCABEZADO
+    doc
+      .fontSize(22)
+      .text("BrewMaster - Recibo de Venta", { align: "center" })
+      .moveDown();
+
+    doc
+      .fontSize(12)
+      .text(`Venta N°: ${venta.numero_documento}`)
+      .text(`Fecha: ${new Date(venta.fecha_hora).toLocaleString()}`)
+      .moveDown();
+
+    // CLIENTE
+    doc.fontSize(16).text("Datos del Cliente", { underline: true });
+    doc.fontSize(12);
+
+    if (venta.clientes) {
+      doc
+        .text(`Nombre: ${venta.clientes.nombre}`)
+        .text(`RUT: ${venta.clientes.rut || "—"}`);
+    } else {
+      doc.text("Cliente: Venta sin cliente asociado");
+    }
+
+    doc.moveDown();
+
+    // DETALLE
+    doc.fontSize(16).text("Detalle de la Venta", { underline: true });
+    doc.moveDown();
+
+    detalle.forEach((item) => {
+      const barril = barrilesMap[item.barril_id] || {};
+      const nombreCerveza = barril.tipo_cerveza || "Cerveza";
+      const codigoInterno = barril.codigo_interno || "—";
+
+      doc
+        .fontSize(12)
+        .text(`${nombreCerveza} | Barril ${codigoInterno}`)
+        .text(
+          `Cantidad: ${item.cantidad} ${item.unidad} — Precio unit: $${Number(
+            item.precio_unitario
+          ).toLocaleString()}`
+        )
+        .text(
+          `Subtotal: $${Number(item.subtotal || 0).toLocaleString()}`
+        )
+        .moveDown(0.5);
+    });
+
+    doc.moveDown();
+
+    // TOTALES
+    doc.fontSize(16).text("Totales", { underline: true });
+    doc.moveDown(0.5);
+
+    doc.fontSize(12);
+    doc.text(
+      `Total Bruto: $${Number(venta.total_bruto || 0).toLocaleString()}`
+    );
+    doc.text(
+      `Descuento: $${Number(venta.descuento_total || 0).toLocaleString()}`
+    );
+    doc.text(
+      `Total Neto: $${Number(venta.total_neto || 0).toLocaleString()}`
+    );
+
+    doc.moveDown(2);
+
+    doc.fontSize(13).text("Gracias por su compra", { align: "center" });
+
+    doc.end();
+  } catch (err) {
+    console.error("❌ Error generando PDF:", err);
+    res.status(500).json({ error: "Error generando PDF" });
+  }
+})
+
+/**
+ * Buscar venta por número de documento (folio)
+ * GET /api/ventas/folio/:folio
+ */
+router.get("/folio/:folio", async (req, res, next) => {
+  try {
+    const folio = (req.params.folio || "").trim()
+
+    if (!folio) {
+      return res.status(400).json({ error: "Folio inválido" })
+    }
+
+    // 1) Venta + cliente + bodega
+    const { data: venta, error: ventaError } = await supabase
+      .from("ventas")
+      .select("*, clientes(nombre,rut), bodegas(nombre)")
+      .eq("numero_documento", folio)
+      .maybeSingle()
+
+    if (ventaError) {
+      console.error("❌ Error Supabase buscando venta por folio:", ventaError)
+      return res.status(500).json({
+        error: "Error al obtener la venta",
+        details: ventaError.message,
+      })
+    }
+
+    if (!venta) {
+      return res.status(404).json({ error: "Venta no encontrada" })
+    }
+
+    // 2) Detalle de la venta
+    const { data: detalle, error: detError } = await supabase
+      .from("venta_detalle")
+      .select("*")
+      .eq("venta_id", venta.id)
+
+    if (detError) {
+      console.error(
+        "❌ Error Supabase obteniendo detalle de venta por folio:",
+        detError
+      )
+      return res.status(500).json({
+        error: "Error al obtener el detalle de la venta",
+        details: detError.message,
+      })
+    }
+
+    // 3) Barriles asociados para mostrar nombres/códigos
+    const barrilIds = Array.from(
+      new Set((detalle || []).map((d) => d.barril_id).filter(Boolean))
+    )
+
+    let barrilesMap = {}
+    if (barrilIds.length > 0) {
+      const { data: barriles, error: barrilError } = await supabase
+        .from("barriles")
+        .select("id,codigo_interno,tipo_cerveza,capacidad_litros")
+        .in("id", barrilIds)
+
+      if (barrilError) {
+        console.error(
+          "⚠️ Error Supabase obteniendo barriles para venta por folio:",
+          barrilError
+        )
+      } else {
+        barrilesMap = Object.fromEntries(
+          (barriles || []).map((b) => [b.id, b])
+        )
+      }
+    }
+
+    const detallesEnriquecidos = (detalle || []).map((d) => {
+      const barrilInfo = barrilesMap[d.barril_id] || {}
+      return {
+        ...d,
+        barril_nombre: barrilInfo.tipo_cerveza || "Barril",
+        barril_codigo: barrilInfo.codigo_interno || null,
+      }
+    })
+
+    return res.json({
+      ...venta,
+      cliente_nombre: venta.clientes?.nombre || null,
+      cliente_rut: venta.clientes?.rut || null,
+      bodega_nombre: venta.bodegas?.nombre || null,
+      detalles: detallesEnriquecidos,
+    })
+  } catch (err) {
+    console.error("❌ Error inesperado en GET /api/ventas/folio/:folio:", err)
+    next(err)
+  }
+})
+
+/**
  * GET /api/ventas/:id
  */
 router.get("/:id", async (req, res, next) => {
@@ -297,22 +538,6 @@ router.get("/:id", async (req, res, next) => {
 
 /**
  * POST /api/ventas
- *
- * Body esperado (ejemplo):
- * {
- *   cliente_id: 1 | null,
- *   bodega_id: 1 | null,
- *   tipo_documento: 'BOLETA',
- *   numero_documento: '000123',
- *   metodo_pago: 'EFECTIVO',
- *   descuento_total: 0,
- *   observaciones: 'Venta POS',
- *   items: [
- *     { barril_id: 10, cantidad: 0.5, unidad: 'LITRO', precio_unitario: 3000 },
- *     { barril_id: 10, cantidad: 1, unidad: 'LITRO', precio_unitario: 5800 },
- *     { barril_id: 22, cantidad: 1, unidad: 'BARRIL', precio_unitario: 50000 }
- *   ]
- * }
  */
 router.post("/", async (req, res, next) => {
   try {
@@ -346,7 +571,7 @@ router.post("/", async (req, res, next) => {
       return {
         barril_id: item.barril_id,
         cantidad,
-        unidad: item.unidad || "BARRIL", // si no viene, asumimos barril completo
+        unidad: item.unidad || "BARRIL",
         precio_unitario,
         subtotal,
       }
@@ -408,7 +633,6 @@ router.post("/", async (req, res, next) => {
     for (const d of detalleConVenta) {
       const barrilId = d.barril_id
 
-      // Movimiento
       await registrarMovimientoVenta(req, barrilId, ventaId, {
         tipo_movimiento: "VENTA_POS",
         origen_bodega_id: bodega_id || null,
@@ -418,7 +642,6 @@ router.post("/", async (req, res, next) => {
         observaciones: `Venta POS ${tipo_documento} ${numero_documento || ""}`.trim(),
       })
 
-      // Litros vendidos
       if (d.unidad === "LITRO") {
         const litrosVendidos = Number(d.cantidad) || 0
         await descontarLitrosDeBarril(barrilId, litrosVendidos)
@@ -449,163 +672,5 @@ router.post("/", async (req, res, next) => {
     next(err)
   }
 })
-
-// ======================================================
-// GENERAR BOLETA PDF: GET /api/ventas/pdf/:id
-// ======================================================
-router.get("/pdf/:id", async (req, res) => {
-  try {
-    const ventaId = Number(req.params.id);
-    if (!ventaId) {
-      return res.status(400).json({ error: "ID inválido" });
-    }
-
-    // 1) OBTENER VENTA
-    const { data: venta, error: errorVenta } = await supabase
-      .from("ventas")
-      .select("*, clientes(nombre,rut), bodegas(nombre)")
-      .eq("id", ventaId)
-      .maybeSingle();
-
-    if (errorVenta) {
-      console.error("Error obteniendo venta:", errorVenta);
-      return res.status(500).json({ error: "Error obteniendo venta" });
-    }
-
-    if (!venta) {
-      return res.status(404).json({ error: "Venta no encontrada" });
-    }
-
-    // 2) OBTENER DETALLE (SIN JOINS)
-    const { data: detalle, error: errorDetalle } = await supabase
-      .from("venta_detalle")
-      .select("*")
-      .eq("venta_id", ventaId);
-
-    if (errorDetalle) {
-      console.error("Error obteniendo detalle:", errorDetalle);
-      return res.status(500).json({ error: "Error obteniendo detalle" });
-    }
-
-    // 3) OBTENER BARRILES USADOS EN EL DETALLE
-    const barrilIds = [
-      ...new Set(detalle.map((d) => d.barril_id).filter(Boolean)),
-    ];
-
-    let barrilesMap = {};
-    if (barrilIds.length > 0) {
-      const { data: barriles, error: errorBarriles } = await supabase
-        .from("barriles")
-        .select("id, codigo_interno, tipo_cerveza")
-        .in("id", barrilIds);
-
-      if (errorBarriles) {
-        console.error("Error obteniendo barriles:", errorBarriles);
-      } else {
-        barrilesMap = (barriles || []).reduce((acc, b) => {
-          acc[b.id] = b;
-          return acc;
-        }, {});
-      }
-    }
-
-    // ============ INICIO PDF ============
-    const doc = new PDFDocument({ margin: 40 });
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="boleta_${ventaId}.pdf"`
-    );
-
-    doc.pipe(res);
-
-    // ------------------------
-    // ENCABEZADO
-    // ------------------------
-    doc
-      .fontSize(22)
-      .text("BrewMaster - Recibo de Venta", { align: "center" })
-      .moveDown();
-
-    doc
-      .fontSize(12)
-      .text(`Venta N°: ${venta.numero_documento}`)
-      .text(`Fecha: ${new Date(venta.fecha_hora).toLocaleString()}`)
-      .moveDown();
-
-    // ------------------------
-    // CLIENTE
-    // ------------------------
-    doc.fontSize(16).text("Datos del Cliente", { underline: true });
-    doc.fontSize(12);
-
-    if (venta.clientes) {
-      doc
-        .text(`Nombre: ${venta.clientes.nombre}`)
-        .text(`RUT: ${venta.clientes.rut || "—"}`);
-    } else {
-      doc.text("Cliente: Venta sin cliente asociado");
-    }
-
-    doc.moveDown();
-
-    // ------------------------
-    // DETALLE
-    // ------------------------
-    doc.fontSize(16).text("Detalle de la Venta", { underline: true });
-    doc.moveDown();
-
-    detalle.forEach((item) => {
-      const barril = barrilesMap[item.barril_id] || {};
-      const nombreCerveza = barril.tipo_cerveza || "Cerveza";
-      const codigoInterno = barril.codigo_interno || "—";
-
-      doc
-        .fontSize(12)
-        .text(`${nombreCerveza} | Barril ${codigoInterno}`)
-        .text(
-          `Cantidad: ${item.cantidad} ${item.unidad} — Precio unit: $${Number(
-            item.precio_unitario
-          ).toLocaleString()}`
-        )
-        .text(
-          `Subtotal: $${Number(item.subtotal || 0).toLocaleString()}`
-        )
-        .moveDown(0.5);
-    });
-
-    doc.moveDown();
-
-    // ------------------------
-    // TOTALES
-    // ------------------------
-    doc.fontSize(16).text("Totales", { underline: true });
-    doc.moveDown(0.5);
-
-    doc.fontSize(12);
-    doc.text(
-      `Total Bruto: $${Number(venta.total_bruto || 0).toLocaleString()}`
-    );
-    doc.text(
-      `Descuento: $${Number(venta.descuento_total || 0).toLocaleString()}`
-    );
-    doc.text(
-      `Total Neto: $${Number(venta.total_neto || 0).toLocaleString()}`
-    );
-
-    doc.moveDown(2);
-
-    doc.fontSize(13).text("Gracias por su compra", { align: "center" });
-
-    // Finalizar PDF
-    doc.end();
-  } catch (err) {
-    console.error("❌ Error generando PDF:", err);
-    res.status(500).json({ error: "Error generando PDF" });
-  }
-});
-
-
 
 export default router
