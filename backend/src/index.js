@@ -12,6 +12,9 @@ import movimientosRoutes from "./routes/movimientos.js"
 import reportesRoutes from "./routes/reportes.js"
 import ventasRouter from "./routes/ventas.js"
 import devolucionesRouter from "./routes/devoluciones.js"
+import usuariosRouter from "./routes/usuarios.js"
+import rolesRouter from "./routes/roles.js"
+import authRoutes from "./routes/auth.js"
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -51,6 +54,7 @@ app.get("/", (_req, res) => {
 // ─────────────────────────────────────────────
 // RUTAS API
 // ─────────────────────────────────────────────
+app.use("/api/auth", authRoutes)
 app.use("/api/barriles", barrilesRouter);
 app.use("/api/lecturas-qr", lecturasQrRouter);
 app.use("/api/categorias-cerveza", categoriasCervezaRouter);
@@ -59,6 +63,10 @@ app.use("/api/movimientos", movimientosRoutes)
 app.use("/api/reportes", reportesRoutes)
 app.use("/api/ventas", ventasRouter)
 app.use("/api/devoluciones", devolucionesRouter)
+app.use("/api/usuarios", usuariosRouter)
+app.use("/api/usuarios", usuariosRouter)
+app.use("/api/roles", rolesRouter)
+
 
 // 404
 app.use((_req, res) => {

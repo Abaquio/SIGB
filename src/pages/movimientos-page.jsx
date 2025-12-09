@@ -403,7 +403,7 @@ export default function MovimientosPage() {
               <Legend />
               <Bar
                 dataKey="creaciones"
-                name="Creaciones / Reactivaciones"
+                name="Creaciones"
                 fill="#22c55e"
                 radius={[8, 8, 0, 0]}
               />
@@ -415,7 +415,7 @@ export default function MovimientosPage() {
               />
               <Bar
                 dataKey="eliminaciones"
-                name="Eliminaciones / Inactivaciones"
+                name="Eliminaciones"
                 fill="#f97373"
                 radius={[8, 8, 0, 0]}
               />

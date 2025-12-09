@@ -1,60 +1,93 @@
 "use client"
 
-import { useState } from "react"
-import NuevoStaffModal from "@/components/modales/nuevoStaff-modal"
+import { useState, useEffect } from "react"
+import NuevoStaffModal from "../components/modales/nuevoStaff-modal"
+import StaffDetalleModal from "../components/modales/staffDetalle-modal"
+import ValidadoCard from "../components/ui/validado"
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000"
 
 export default function StaffPage() {
-  const [staff, setStaff] = useState([
-    {
-      id: 1,
-      nombre: "Carlos González",
-      email: "carlos@brewmaster.cl",
-      telefono: "+56 9 2123 4567",
-      cargo: "administrador",
-      rut: "15234567-8",
-      fechaContratacion: "2023-06-15",
-      estado: "activo",
-    },
-    {
-      id: 2,
-      nombre: "María López",
-      email: "maria@brewmaster.cl",
-      telefono: "+56 9 3234 5678",
-      cargo: "vendedor",
-      rut: "16345678-9",
-      fechaContratacion: "2023-09-20",
-      estado: "activo",
-    },
-    {
-      id: 3,
-      nombre: "Roberto Silva",
-      email: "roberto@brewmaster.cl",
-      telefono: "+56 9 4345 6789",
-      cargo: "bodeguero",
-      rut: "17456789-0",
-      fechaContratacion: "2024-01-10",
-      estado: "activo",
-    },
-  ])
+  const [staff, setStaff] = useState([])
+  const [roles, setRoles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedStaff, setSelectedStaff] = useState(null)
   const [showDetalles, setShowDetalles] = useState(false)
 
-  const handleAddStaff = (nuevoStaff) => {
-    setStaff((prev) => [
-      ...prev,
-      {
-        ...nuevoStaff,
-        id: Math.max(...prev.map((s) => s.id), 0) + 1,
-        estado: "activo",
-      },
-    ])
-    setIsModalOpen(false)
+  // Toast de validación
+  const [toastOpen, setToastOpen] = useState(false)
+  const [toastTitle, setToastTitle] = useState("")
+  const [toastMessage, setToastMessage] = useState("")
+
+  // Cargar roles desde la API
+  const cargarRoles = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/roles`)
+      if (!res.ok) throw new Error("Error al cargar roles")
+      const data = await res.json()
+      setRoles(data || [])
+    } catch (err) {
+      console.error(err)
+    }
   }
 
-  const handleEliminar = (id) => {
-    setStaff((prev) => prev.filter((s) => s.id !== id))
+  // Cargar usuarios desde la API
+  const cargarStaff = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch(`${API_URL}/api/usuarios`)
+      if (!res.ok) throw new Error("Error al cargar staff")
+      const data = await res.json()
+
+      const normalizados = (data || []).map((u) => {
+        const rolCodigo = u.rol || ""
+        const cargoLabel =
+          rolCodigo === "ADMIN"
+            ? "administrador"
+            : rolCodigo
+            ? rolCodigo.toLowerCase()
+            : "sin rol"
+
+        return {
+          id: u.id,
+          nombre: u.nombre_completo,
+          email: u.email,
+          telefono: u.telefono || "",
+          cargo: cargoLabel,
+          rolCodigo,
+          rut: u.rut,
+          fechaContratacion: u.created_at ? u.created_at.slice(0, 10) : "",
+          estado: u.activo ? "activo" : "inactivo",
+          rol_id: u.rol_id ?? null,
+        }
+      })
+
+      setStaff(normalizados)
+      setError(null)
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    cargarRoles()
+    cargarStaff()
+  }, [])
+
+  const handleAddStaff = (nuevoDesdeApi) => {
+    setStaff((prev) => [...prev, nuevoDesdeApi])
+    setIsModalOpen(false)
+
+    // Mostrar tarjeta de validación
+    setToastTitle("Usuario creado")
+    setToastMessage(`El usuario "${nuevoDesdeApi.nombre}" fue registrado correctamente.`)
+    setToastOpen(true)
   }
 
   const handleVerDetalles = (miembroStaff) => {
@@ -62,15 +95,28 @@ export default function StaffPage() {
     setShowDetalles(true)
   }
 
+  const handleCloseDetalles = () => {
+    setShowDetalles(false)
+    setSelectedStaff(null)
+  }
+
+  const handleStaffUpdated = (actualizado) => {
+    setStaff((prev) => prev.map((s) => (s.id === actualizado.id ? actualizado : s)))
+  }
+
   const totalStaff = staff.length
   const staffActivo = staff.filter((s) => s.estado === "activo").length
-  const administradores = staff.filter((s) => s.cargo === "administrador").length
+  const administradores = staff.filter((s) => s.rolCodigo === "ADMIN").length
 
   const cargoEmoji = {
     administrador: "👨‍💼",
+    ADMIN: "👨‍💼",
     vendedor: "🛍️",
-    gerente: "📋",
+    VENDEDOR: "🛍️",
     bodeguero: "📦",
+    OPERARIO: "📦",
+    supervisor: "📋",
+    SUPERVISOR: "📋",
     asistente: "🤝",
   }
 
@@ -92,7 +138,7 @@ export default function StaffPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-card border border-border rounded-lg p-6">
             <p className="text-foreground/60 text-sm font-medium">Total Staff</p>
             <p className="text-4xl font-bold text-accent mt-2">{totalStaff}</p>
@@ -107,132 +153,135 @@ export default function StaffPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Error / Loading */}
+        {error && (
+          <div className="mb-4 text-sm text-red-500 bg-red-500/10 border border-red-500/40 rounded-lg px-4 py-2">
+            {error}
+          </div>
+        )}
+
+        {/* Tabla responsiva */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-secondary border-b border-border">
-              <tr>
-                <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">Nombre</th>
-                <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">Cargo</th>
-                <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">Email</th>
-                <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">Teléfono</th>
-                <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">Contratación</th>
-                <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">Estado</th>
-                <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {staff.map((miembro) => (
-                <tr key={miembro.id} className="hover:bg-secondary/50 transition-colors">
-                  <td className="px-6 py-4 text-foreground font-medium">{miembro.nombre}</td>
-                  <td className="px-6 py-4">
-                    <span className="flex items-center gap-2">
-                      <span>{cargoEmoji[miembro.cargo]}</span>
-                      <span className="text-foreground capitalize">{miembro.cargo}</span>
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-foreground/80">{miembro.email}</td>
-                  <td className="px-6 py-4 text-foreground/80">{miembro.telefono || "-"}</td>
-                  <td className="px-6 py-4 text-foreground/80 text-sm">{miembro.fechaContratacion}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        miembro.estado === "activo" ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
-                      }`}
+          {loading ? (
+            <div className="p-6 text-center text-foreground/60 text-sm">
+              Cargando staff...
+            </div>
+          ) : staff.length === 0 ? (
+            <div className="p-6 text-center text-foreground/60 text-sm">
+              Aún no hay usuarios registrados.
+            </div>
+          ) : (
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead className="bg-secondary border-b border-border">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">
+                      Nombre
+                    </th>
+                    <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">
+                      Cargo
+                    </th>
+                    <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">
+                      Email
+                    </th>
+                    <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">
+                      Teléfono
+                    </th>
+                    <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">
+                      Contratación
+                    </th>
+                    <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">
+                      Estado
+                    </th>
+                    <th className="px-6 py-4 text-left text-foreground font-semibold text-sm">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {staff.map((miembro) => (
+                    <tr
+                      key={miembro.id}
+                      className="hover:bg-secondary/50 transition-colors"
                     >
-                      {miembro.estado.charAt(0).toUpperCase() + miembro.estado.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleVerDetalles(miembro)}
-                        className="p-2 hover:bg-secondary rounded-lg transition-colors text-foreground hover:text-accent"
-                        title="Ver detalles"
-                      >
-                        👁️
-                      </button>
-                      <button
-                        onClick={() => handleEliminar(miembro.id)}
-                        className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-foreground hover:text-red-500"
-                        title="Eliminar"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <td className="px-6 py-4 text-foreground font-medium whitespace-nowrap">
+                        {miembro.nombre}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="flex items-center gap-2">
+                          <span>
+                            {cargoEmoji[miembro.cargo] ||
+                              cargoEmoji[miembro.rolCodigo] ||
+                              "👤"}
+                          </span>
+                          <span className="text-foreground capitalize">
+                            {miembro.cargo}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-foreground/80">
+                        {miembro.email || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-foreground/80">
+                        {miembro.telefono || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-foreground/80 text-sm whitespace-nowrap">
+                        {miembro.fechaContratacion || "-"}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
+                            miembro.estado === "activo"
+                              ? "bg-green-500/20 text-green-500"
+                              : "bg-red-500/20 text-red-500"
+                          }`}
+                        >
+                          {miembro.estado.charAt(0).toUpperCase() +
+                            miembro.estado.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <button
+                          onClick={() => handleVerDetalles(miembro)}
+                          className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors text-foreground hover:text-accent text-xs md:text-sm"
+                          title="Ver y editar"
+                        >
+                          Ver
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Modal Nuevo Staff */}
-      <NuevoStaffModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAddStaff={handleAddStaff} />
+      <NuevoStaffModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAddStaff={handleAddStaff}
+        roles={roles}
+      />
 
-      {/* Modal Ver Detalles */}
-      {showDetalles && selectedStaff && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-200">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md animate-in zoom-in duration-300">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-accent">Detalles del Staff</h2>
-              <button
-                onClick={() => setShowDetalles(false)}
-                className="text-foreground hover:text-accent transition-colors text-2xl"
-              >
-                ×
-              </button>
-            </div>
+      {/* Modal Ver / Editar Staff (externo) */}
+      <StaffDetalleModal
+        isOpen={showDetalles}
+        onClose={handleCloseDetalles}
+        staff={selectedStaff}
+        roles={roles}
+        onUpdated={handleStaffUpdated}
+      />
 
-            <div className="space-y-4">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 rounded-full bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center text-2xl mx-auto">
-                  {cargoEmoji[selectedStaff.cargo]}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-foreground/60 text-sm font-medium">Nombre</p>
-                <p className="text-foreground font-semibold">{selectedStaff.nombre}</p>
-              </div>
-              <div>
-                <p className="text-foreground/60 text-sm font-medium">RUT</p>
-                <p className="text-foreground font-semibold">{selectedStaff.rut}</p>
-              </div>
-              <div>
-                <p className="text-foreground/60 text-sm font-medium">Cargo</p>
-                <p className="text-foreground font-semibold capitalize">{selectedStaff.cargo}</p>
-              </div>
-              <div>
-                <p className="text-foreground/60 text-sm font-medium">Email</p>
-                <p className="text-foreground font-semibold">{selectedStaff.email}</p>
-              </div>
-              <div>
-                <p className="text-foreground/60 text-sm font-medium">Teléfono</p>
-                <p className="text-foreground font-semibold">{selectedStaff.telefono || "-"}</p>
-              </div>
-              <div>
-                <p className="text-foreground/60 text-sm font-medium">Fecha de Contratación</p>
-                <p className="text-foreground font-semibold">{selectedStaff.fechaContratacion}</p>
-              </div>
-              <div>
-                <p className="text-foreground/60 text-sm font-medium">Estado</p>
-                <p className={`font-semibold ${selectedStaff.estado === "activo" ? "text-green-500" : "text-red-500"}`}>
-                  {selectedStaff.estado.charAt(0).toUpperCase() + selectedStaff.estado.slice(1)}
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowDetalles(false)}
-                className="w-full px-4 py-2 bg-sidebar-primary text-sidebar-primary-foreground rounded-lg hover:opacity-90 transition-opacity font-medium mt-6"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tarjeta de validación */}
+      <ValidadoCard
+        open={toastOpen}
+        title={toastTitle}
+        message={toastMessage}
+        onClose={() => setToastOpen(false)}
+      />
     </div>
   )
 }

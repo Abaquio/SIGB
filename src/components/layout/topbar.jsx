@@ -7,54 +7,78 @@ export default function TopBar({ sidebarOpen, setSidebarOpen }) {
   const [showMenu, setShowMenu] = useState(false)
   const [showPerfilModal, setShowPerfilModal] = useState(false)
 
+  const handleToggleMenu = () => {
+    setShowMenu((prev) => !prev)
+  }
+
+  const handleVerPerfil = () => {
+    setShowMenu(false)
+    setShowPerfilModal(true)
+  }
+
+  const handleClosePerfil = () => {
+    setShowPerfilModal(false)
+  }
+
   return (
     <>
-      <header className="bg-card border-b border-border px-8 py-4 flex items-center justify-between">
+      <header className="bg-card border-b border-border px-4 md:px-8 py-3 flex items-center justify-between">
+        {/* Botón sidebar (izquierda) */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 hover:bg-secondary rounded-lg transition-colors"
+          className="p-2 hover:bg-secondary rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-accent/60"
         >
-          <span className="text-xl">☰</span>
+          <span className="sr-only">Abrir / cerrar menú lateral</span>
+          <span className="block w-5 h-[2px] bg-foreground mb-[5px] rounded"></span>
+          <span className="block w-4 h-[2px] bg-foreground mb-[5px] rounded"></span>
+          <span className="block w-3 h-[2px] bg-foreground rounded"></span>
         </button>
 
-        <div className="text-center flex-1">
-          <h2 className="text-accent font-bold text-2xl">BrewMaster</h2>
+        {/* Título centrado */}
+        <div className="flex-1 flex justify-center">
+          <h1 className="text-lg md:text-2xl font-bold tracking-wide text-foreground select-none">
+            Totem
+          </h1>
         </div>
 
-        <div className="flex-1 flex items-center justify-end gap-4">
-          {/* User Icon */}
-          <button className="p-2 hover:bg-secondary rounded-lg transition-colors">
-            <span className="text-xl">👤</span>
-          </button>
+        {/* Área derecha: usuario + menú */}
+        <div className="flex items-center gap-3">
+          {/* Info rápida usuario (avatar + texto) */}
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-secondary border border-border rounded-full">
+            <div className="w-8 h-8 rounded-full bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center text-sm font-semibold">
+              T
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-sm font-medium text-foreground">Usuario</span>
+              <span className="text-[11px] text-foreground/60">Sesión activa</span>
+            </div>
+          </div>
 
-          {/* Menu de tres puntos */}
+          {/* Menú de 3 puntos */}
           <div className="relative">
             <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+              onClick={handleToggleMenu}
+              className="p-2 hover:bg-secondary rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-accent/60"
             >
-              <span className="text-xl">⋯</span>
+              <span className="sr-only">Abrir menú de usuario</span>
+              <span className="text-xl leading-none">⋯</span>
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-lg z-50 animate-in fade-in-50 duration-200">
+              <div className="absolute right-0 mt-2 w-52 bg-card border border-border rounded-lg shadow-lg z-50 overflow-hidden">
                 <button
-                  onClick={() => {
-                    setShowPerfilModal(true)
-                    setShowMenu(false)
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary rounded-t-lg transition-colors text-foreground"
+                  onClick={handleVerPerfil}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors"
                 >
                   <span>👤</span>
-                  <span>Ver Perfil</span>
+                  <span>Ver perfil</span>
                 </button>
-                <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-foreground">
-                  <span>⚙️</span>
-                  <span>Configuración</span>
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary rounded-b-lg transition-colors text-destructive">
+                <button
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-secondary transition-colors"
+                  type="button"
+                >
                   <span>🚪</span>
-                  <span>Cerrar Sesión</span>
+                  <span>Cerrar sesión</span>
                 </button>
               </div>
             )}
@@ -62,7 +86,8 @@ export default function TopBar({ sidebarOpen, setSidebarOpen }) {
         </div>
       </header>
 
-      <PerfilVistaFull isOpen={showPerfilModal} onClose={() => setShowPerfilModal(false)} />
+      {/* Modal de perfil */}
+      <PerfilVistaFull isOpen={showPerfilModal} onClose={handleClosePerfil} />
     </>
   )
 }

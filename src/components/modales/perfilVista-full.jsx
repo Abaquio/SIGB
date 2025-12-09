@@ -4,253 +4,185 @@ import { useState } from "react"
 
 export default function PerfilVistaFull({ isOpen, onClose }) {
   const [editMode, setEditMode] = useState(false)
-  const [userData, setUserData] = useState({
-    nombre: "Juan Carlos Pérez",
-    email: "juan.perez@brewmaster.com",
+
+  // Datos demo temporal (después los reemplazas)
+  const [userData] = useState({
+    nombre: "Usuario Totem",
+    email: "usuario@totem.cl",
     telefono: "+56 9 1234 5678",
-    empresa: "BrewMaster S.A.",
+    empresa: "Cervecería Totem",
     cargo: "Administrador",
     ciudad: "Santiago",
     rut: "12345678-9",
-    fechaRegistro: "15 Enero 2024",
+    fechaRegistro: "01 Enero 2025",
   })
-
-  const [formData, setFormData] = useState(userData)
-
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-  }
-
-  const handleSave = () => {
-    setUserData(formData)
-    setEditMode(false)
-  }
-
-  const handleCancel = () => {
-    setFormData(userData)
-    setEditMode(false)
-  }
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-background z-50 overflow-auto">
-      {/* Header */}
-      <div className="bg-card border-b border-border sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-8 py-4 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-accent">Mi Perfil</h1>
-          <button onClick={onClose} className="p-2 hover:bg-secondary rounded-lg transition-colors text-2xl">
-            ×
-          </button>
-        </div>
-      </div>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-in fade-in duration-200">
+      
+      {/* CONTENEDOR FULLSCREEN */}
+      <div className="bg-background w-full h-full max-h-screen max-w-screen overflow-hidden shadow-xl animate-in zoom-in duration-300 flex flex-col border border-border rounded-none">
 
-      {/* Content */}
-      <div className="max-w-6xl mx-auto px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Columna izquierda - Avatar y básico */}
-          <div className="lg:col-span-1">
-            <div className="bg-card border border-border rounded-lg p-8 text-center sticky top-20">
-              {/* Avatar */}
-              <div className="w-32 h-32 bg-gradient-to-br from-accent to-sidebar-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-6xl">👤</span>
-              </div>
-
-              <h2 className="text-2xl font-bold text-foreground mb-1">{userData.nombre}</h2>
-              <p className="text-accent font-semibold mb-4">{userData.cargo}</p>
-
-              <div className="space-y-3 text-sm text-foreground">
-                <div className="py-2 border-b border-border">
-                  <p className="text-xs text-gray-500 mb-1">Empresa</p>
-                  <p className="font-medium">{userData.empresa}</p>
-                </div>
-                <div className="py-2 border-b border-border">
-                  <p className="text-xs text-gray-500 mb-1">Desde</p>
-                  <p className="font-medium">{userData.fechaRegistro}</p>
-                </div>
-                <div className="py-2">
-                  <p className="text-xs text-gray-500 mb-1">Estado</p>
-                  <span className="inline-block px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium">
-                    Activo
-                  </span>
-                </div>
-              </div>
-
-              {!editMode && (
-                <button
-                  onClick={() => {
-                    setFormData(userData)
-                    setEditMode(true)
-                  }}
-                  className="w-full mt-6 px-4 py-2 bg-sidebar-primary text-sidebar-primary-foreground rounded-lg hover:opacity-90 transition-opacity font-medium"
-                >
-                  Editar Perfil
-                </button>
-              )}
-            </div>
+        {/* HEADER */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
+          <div>
+            <h2 className="text-2xl font-bold text-accent">Mi Perfil</h2>
+            <p className="text-sm text-foreground/60">
+              Información de la cuenta e inicio de sesión
+            </p>
           </div>
 
-          {/* Columna derecha - Formulario */}
-          <div className="lg:col-span-2">
-            <div className="bg-card border border-border rounded-lg p-8">
-              <h3 className="text-2xl font-bold text-foreground mb-6">
-                {editMode ? "Editar Información" : "Información Personal"}
-              </h3>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className="hidden md:inline-flex px-4 py-1.5 rounded-lg border border-border text-sm text-foreground hover:bg-secondary transition-colors"
+            >
+              {editMode ? "Salir de edición" : "Editar perfil"}
+            </button>
 
-              {editMode ? (
-                <form className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-foreground text-sm font-medium mb-2">Nombre Completo</label>
-                      <input
-                        type="text"
-                        name="nombre"
-                        value={formData.nombre}
-                        onChange={handleChange}
-                        className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-accent transition-colors"
-                      />
-                    </div>
+            <button
+              onClick={onClose}
+              className="text-3xl leading-none text-foreground hover:text-accent transition-colors"
+            >
+              ×
+            </button>
+          </div>
+        </div>
 
-                    <div>
-                      <label className="block text-foreground text-sm font-medium mb-2">RUT</label>
-                      <input
-                        type="text"
-                        name="rut"
-                        value={formData.rut}
-                        onChange={handleChange}
-                        className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-accent transition-colors"
-                      />
-                    </div>
+        {/* CONTENIDO SCROLLEABLE */}
+        <div className="flex-1 overflow-y-auto p-6 md:p-10">
+          <div className="grid lg:grid-cols-3 gap-10">
 
-                    <div>
-                      <label className="block text-foreground text-sm font-medium mb-2">Email</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-accent transition-colors"
-                      />
-                    </div>
+            {/* PANEL IZQUIERDO */}
+            <div className="lg:col-span-1 space-y-6">
 
-                    <div>
-                      <label className="block text-foreground text-sm font-medium mb-2">Teléfono</label>
-                      <input
-                        type="tel"
-                        name="telefono"
-                        value={formData.telefono}
-                        onChange={handleChange}
-                        className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-accent transition-colors"
-                      />
-                    </div>
+              {/* Avatar */}
+              <div className="flex flex-col items-center text-center">
+                <div className="w-28 h-28 rounded-full bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center text-5xl font-semibold mb-4">
+                  {userData.nombre.charAt(0).toUpperCase()}
+                </div>
 
-                    <div>
-                      <label className="block text-foreground text-sm font-medium mb-2">Cargo</label>
-                      <input
-                        type="text"
-                        name="cargo"
-                        value={formData.cargo}
-                        onChange={handleChange}
-                        className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-accent transition-colors"
-                      />
-                    </div>
+                <h3 className="text-xl font-semibold text-foreground">
+                  {userData.nombre}
+                </h3>
 
-                    <div>
-                      <label className="block text-foreground text-sm font-medium mb-2">Ciudad</label>
-                      <input
-                        type="text"
-                        name="ciudad"
-                        value={formData.ciudad}
-                        onChange={handleChange}
-                        className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-accent transition-colors"
-                      />
-                    </div>
+                <p className="text-sm text-foreground/60 mt-1">
+                  {userData.cargo}
+                </p>
+
+                <p className="text-xs text-foreground/40">
+                  {userData.empresa}
+                </p>
+              </div>
+
+              {/* Info corta */}
+              <div className="bg-card border border-border rounded-xl p-5 space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-foreground/60">RUT</span>
+                  <span className="font-medium">{userData.rut}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-foreground/60">Ciudad</span>
+                  <span className="font-medium">{userData.ciudad}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-foreground/60">Miembro desde</span>
+                  <span className="font-medium">{userData.fechaRegistro}</span>
+                </div>
+              </div>
+
+              {/* Estado */}
+              <div className="bg-card border border-border rounded-xl p-5 text-sm">
+                <p className="text-foreground/60 mb-1">Estado de la cuenta</p>
+                <p className="font-medium text-green-400">Activa</p>
+              </div>
+
+            </div>
+
+            {/* PANEL DERECHO */}
+            <div className="lg:col-span-2 space-y-10">
+
+              {/* Información personal */}
+              <div className="bg-card border border-border rounded-xl p-6">
+                <h3 className="text-xl font-semibold text-foreground mb-5">
+                  Información personal
+                </h3>
+
+                <div className="grid md:grid-cols-2 gap-6 text-sm">
+
+                  <div>
+                    <p className="text-foreground/60 text-xs mb-1">Nombre</p>
+                    <p className="font-medium">{userData.nombre}</p>
                   </div>
 
                   <div>
-                    <label className="block text-foreground text-sm font-medium mb-2">Empresa</label>
-                    <input
-                      type="text"
-                      name="empresa"
-                      value={formData.empresa}
-                      onChange={handleChange}
-                      className="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-accent transition-colors"
-                    />
+                    <p className="text-foreground/60 text-xs mb-1">Correo</p>
+                    <p className="font-medium break-all">{userData.email}</p>
                   </div>
 
-                  <div className="flex gap-3 pt-6 border-t border-border">
-                    <button
-                      type="button"
-                      onClick={handleCancel}
-                      className="flex-1 px-4 py-2 bg-secondary text-foreground rounded-lg hover:bg-secondary/80 transition-colors font-medium"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSave}
-                      className="flex-1 px-4 py-2 bg-sidebar-primary text-sidebar-primary-foreground rounded-lg hover:opacity-90 transition-opacity font-medium"
-                    >
-                      Guardar Cambios
-                    </button>
+                  <div>
+                    <p className="text-foreground/60 text-xs mb-1">Teléfono</p>
+                    <p className="font-medium">{userData.telefono}</p>
                   </div>
-                </form>
-              ) : (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Nombre Completo</p>
-                      <p className="text-foreground font-medium">{userData.nombre}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">RUT</p>
-                      <p className="text-foreground font-medium">{userData.rut}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Email</p>
-                      <p className="text-foreground font-medium">{userData.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Teléfono</p>
-                      <p className="text-foreground font-medium">{userData.telefono}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Cargo</p>
-                      <p className="text-foreground font-medium">{userData.cargo}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Ciudad</p>
-                      <p className="text-foreground font-medium">{userData.ciudad}</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <p className="text-xs text-gray-500 mb-2">Empresa</p>
-                      <p className="text-foreground font-medium">{userData.empresa}</p>
-                    </div>
+
+                  <div>
+                    <p className="text-foreground/60 text-xs mb-1">Rol</p>
+                    <p className="font-medium">{userData.cargo}</p>
                   </div>
+
                 </div>
-              )}
-            </div>
-
-            {/* Sección de seguridad */}
-            <div className="bg-card border border-border rounded-lg p-8 mt-8">
-              <h3 className="text-xl font-bold text-foreground mb-6">Seguridad</h3>
-              <div className="space-y-4">
-                <button className="w-full flex items-center justify-between px-4 py-3 bg-secondary rounded-lg hover:bg-secondary/80 transition-colors">
-                  <span className="text-foreground font-medium">Cambiar Contraseña</span>
-                  <span className="text-accent">→</span>
-                </button>
-                <button className="w-full flex items-center justify-between px-4 py-3 bg-secondary rounded-lg hover:bg-secondary/80 transition-colors">
-                  <span className="text-foreground font-medium">Autenticación de Dos Factores</span>
-                  <span className="text-green-400">Activa</span>
-                </button>
               </div>
+
+              {/* Información de inicio de sesión */}
+              <div className="bg-card border border-border rounded-xl p-6">
+                <h3 className="text-xl font-semibold text-foreground mb-5">
+                  Información de inicio de sesión
+                </h3>
+
+                <p className="text-sm text-foreground/70 mb-4">
+                  Aquí verás tus últimos accesos, dispositivos usados y actividad
+                  en la cuenta cuando integremos auditoría.
+                </p>
+
+                <div className="grid md:grid-cols-2 gap-6 text-sm">
+                  
+                  <div className="bg-background border border-dashed border-border rounded-lg p-4">
+                    <p className="text-foreground/60 text-xs mb-1">
+                      Último inicio de sesión
+                    </p>
+                    <p className="font-medium">Pendiente de integración</p>
+                  </div>
+
+                  <div className="bg-background border border-dashed border-border rounded-lg p-4">
+                    <p className="text-foreground/60 text-xs mb-1">
+                      Sesiones activas
+                    </p>
+                    <p className="font-medium">Pendiente de integración</p>
+                  </div>
+
+                </div>
+
+                <p className="mt-4 text-[11px] text-foreground/40">
+                  * Esta sección se conectará a la auditoría de login en una próxima versión.
+                </p>
+              </div>
+
             </div>
           </div>
         </div>
+
+        {/* FOOTER (solo para mobile) */}
+        <div className="p-4 border-t border-border bg-card flex justify-end md:hidden">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground hover:opacity-80 transition"
+          >
+            Cerrar
+          </button>
+        </div>
+
       </div>
     </div>
   )

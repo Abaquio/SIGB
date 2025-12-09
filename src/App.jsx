@@ -14,6 +14,7 @@ import AlertasPage from "./pages/alertas-page"
 import BodegaPage from "./pages/bodega-page"
 import POSPage from "./pages/pos-page"
 import DevolucionPage from "./pages/devolucion-page"
+import StaffPage from "./pages/staff-page"
 
 function App() {
   const navigate = useNavigate()
@@ -43,6 +44,8 @@ function App() {
         return "reportes"
       case "/alertas":
         return "alertas"
+      case "/staff":
+        return "staff"
       default:
         return "inicio"
     }
@@ -71,6 +74,8 @@ function App() {
         return "/reportes"
       case "alertas":
         return "/alertas"
+      case "staff":
+        return "/staff"
       default:
         return "/inicio"
     }
@@ -145,6 +150,8 @@ function App() {
         return <ReportesPage />
       case "alertas":
         return <AlertasPage />
+      case "staff":
+        return <StaffPage />
       default:
         return <Dashboard />
     }
