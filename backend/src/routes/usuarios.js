@@ -10,7 +10,9 @@ router.get("/", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("usuarios")
-      .select("id,nombre_completo,email,rut,rol,activo,created_at,rol_id,telefono")
+      .select(
+        "id,nombre_completo,email,rut,rol,activo,created_at,rol_id,telefono"
+      )
       .order("created_at", { ascending: true })
 
     if (error) {

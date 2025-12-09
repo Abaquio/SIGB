@@ -2,65 +2,26 @@
 
 import { useState, useEffect } from "react"
 
-export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
-  const [rolesBD, setRolesBD] = useState([])
-
+export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [] }) {
   const [formData, setFormData] = useState({
     nombre: "",
     email: "",
     telefono: "",
-    cargo: "",
     rut: "",
+    rol_id: "",
     password: "totem123", // contraseña de prueba editable
     fechaContratacion: new Date().toISOString().split("T")[0],
   })
 
-  // ===============================
-  // Cargar roles desde la BD
-  // ===============================
+  // Al abrir el modal, seleccionar primer rol disponible
   useEffect(() => {
-    const fetchRoles = async () => {
-      try {
-        const API = import.meta.env.VITE_API_URL || "http://localhost:4000"
-        const res = await fetch(`${API}/api/roles`)
-
-        if (!res.ok) {
-          console.error("Error HTTP al obtener roles:", res.status, res.statusText)
-          throw new Error(`HTTP ${res.status}`)
-        }
-
-        const data = await res.json()
-
-        // data: [{id, nombre, ...}, ...] o { roles: [...] }
-        let rolesArray = []
-        if (Array.isArray(data)) {
-          rolesArray = data.map((r) => r.nombre).filter(Boolean)
-        } else if (data && Array.isArray(data.roles)) {
-          rolesArray = data.roles
-        }
-
-        if (!rolesArray.length) {
-          rolesArray = ["ADMIN", "OPERARIO", "SUPERVISOR", "VENDEDOR"]
-        }
-
-        setRolesBD(rolesArray)
-        setFormData((prev) => ({
-          ...prev,
-          cargo: prev.cargo || rolesArray[0] || "",
-        }))
-      } catch (e) {
-        console.error("Error obteniendo roles:", e)
-        const fallback = ["ADMIN", "OPERARIO", "SUPERVISOR", "VENDEDOR"]
-        setRolesBD(fallback)
-        setFormData((prev) => ({
-          ...prev,
-          cargo: prev.cargo || fallback[0],
-        }))
-      }
+    if (isOpen && roles.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        rol_id: prev.rol_id || String(roles[0].id),
+      }))
     }
-
-    if (isOpen) fetchRoles()
-  }, [isOpen])
+  }, [isOpen, roles])
 
   if (!isOpen) return null
 
@@ -70,7 +31,6 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
   const handleChange = (e) => {
     const { name, value } = e.target
 
-    // Nombre: solo letras y espacios
     if (name === "nombre") {
       let v = value
         .normalize("NFD")
@@ -81,7 +41,6 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
       return
     }
 
-    // Teléfono: solo dígitos
     if (name === "telefono") {
       let v = value.replace(/\D/g, "")
       v = v.slice(0, 9)
@@ -89,40 +48,34 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
       return
     }
 
-    // RUT mientras escribe (solo formato)
     if (name === "rut") {
       let input = value.toUpperCase().replace(/[^0-9K-]/g, "")
 
       const firstDashIndex = input.indexOf("-")
 
       if (firstDashIndex !== -1) {
-        // Con guion
         let cuerpo = input
           .slice(0, firstDashIndex)
           .replace(/[^0-9]/g, "")
-          .slice(0, 8) // máximo 8 dígitos
+          .slice(0, 8)
 
         let dv = input
           .slice(firstDashIndex + 1)
           .replace(/[^0-9K]/g, "")
-          .slice(0, 1) // solo 1 carácter de DV
+          .slice(0, 1)
 
         const rutFormateado = dv ? `${cuerpo}-${dv}` : `${cuerpo}-`
         setFormData((prev) => ({ ...prev, rut: rutFormateado }))
       } else {
-        // Sin guion todavía
         let cuerpo = input.replace(/[^0-9]/g, "").slice(0, 8)
         setFormData((prev) => ({ ...prev, rut: cuerpo }))
       }
-
       return
     }
 
-    // Otros campos
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  // Autoformato RUT al salir del input
   const handleRutBlur = () => {
     setFormData((prev) => {
       let rut = (prev.rut || "").toUpperCase().replace(/[^0-9K-]/g, "")
@@ -145,10 +98,6 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
     })
   }
 
-  // ===============================
-  // VALIDACIÓN SIMPLE DE RUT
-  // ===============================
-  // Solo formato: 8 dígitos + "-" + 1 dígito o K
   const validarRut = (rutCompleto) => {
     if (!rutCompleto) return false
     const regex = /^[0-9]{8}-[0-9K]$/
@@ -156,15 +105,16 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
   }
 
   // ===============================
-  // SUBMIT
+  // SUBMIT -> POST a /api/usuarios
   // ===============================
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     const nombre = formData.nombre.trim()
     const email = formData.email.trim()
     const rut = formData.rut.trim().toUpperCase()
     const password = formData.password.trim()
+    const rol_id = formData.rol_id ? Number(formData.rol_id) : null
 
     if (!nombre) {
       alert("El nombre es obligatorio.")
@@ -178,7 +128,10 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
       alert("La contraseña es obligatoria.")
       return
     }
-
+    if (!rol_id) {
+      alert("Debes seleccionar un rol.")
+      return
+    }
     if (!validarRut(rut)) {
       alert(
         'El RUT debe tener el formato 8 dígitos + "-" + 1 dígito o K. Ej: 11222333-4'
@@ -186,7 +139,6 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
       return
     }
 
-    // Formatear teléfono bonito
     let telefonoBonito = ""
     if (formData.telefono) {
       const t = formData.telefono
@@ -197,28 +149,50 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
       }
     }
 
-    const newStaff = {
-      nombre,
+    const API = import.meta.env.VITE_API_URL || "http://localhost:4000"
+
+    const payload = {
+      nombre_completo: nombre,
       email,
-      telefono: telefonoBonito,
-      cargo: formData.cargo,
       rut,
-      password, // contraseña editable
-      fechaContratacion: formData.fechaContratacion,
+      rol_id,
+      password,
+      telefono: telefonoBonito || null,
     }
 
-    onAddStaff?.(newStaff)
+    try {
+      const res = await fetch(`${API}/api/usuarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
 
-    // Reset
-    setFormData({
-      nombre: "",
-      email: "",
-      telefono: "",
-      cargo: rolesBD[0] || "",
-      rut: "",
-      password: "totem123",
-      fechaContratacion: new Date().toISOString().split("T")[0],
-    })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        alert(data?.error || "Error al crear el usuario.")
+        return
+      }
+
+      // Pasamos la fila creada al padre
+      onAddStaff?.(data)
+
+      // Reset
+      setFormData({
+        nombre: "",
+        email: "",
+        telefono: "",
+        rut: "",
+        rol_id: roles.length > 0 ? String(roles[0].id) : "",
+        password: "totem123",
+        fechaContratacion: new Date().toISOString().split("T")[0],
+      })
+
+      onClose?.()
+    } catch (err) {
+      console.error(err)
+      alert("Error de conexión al crear el usuario.")
+    }
   }
 
   const telefonoDisplay = formData.telefono
@@ -304,26 +278,26 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
               </div>
             </div>
 
-            {/* Cargo / Rol */}
+            {/* Rol / Cargo */}
             <div>
               <label className="text-sm font-medium text-foreground mb-1 block">
                 Rol / Cargo
               </label>
               <select
-                name="cargo"
-                value={formData.cargo}
+                name="rol_id"
+                value={formData.rol_id}
                 onChange={handleChange}
                 className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground"
               >
-                {rolesBD.map((rol) => (
-                  <option key={rol} value={rol}>
-                    {rol}
+                {roles.map((rol) => (
+                  <option key={rol.id} value={rol.id}>
+                    {rol.nombre}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Fecha de contratación */}
+            {/* Fecha de contratación (visual) */}
             <div>
               <label className="text-sm font-medium text-foreground mb-1 block">
                 Fecha de contratación
@@ -351,7 +325,6 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff }) {
               />
               <p className="text-xs text-foreground/50 mt-1">
                 Esta contraseña se enviará al backend para guardarse con hash.
-                Puedes modificarla antes de crear el usuario.
               </p>
             </div>
           </div>

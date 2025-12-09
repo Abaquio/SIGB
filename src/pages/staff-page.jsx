@@ -80,13 +80,38 @@ export default function StaffPage() {
     cargarStaff()
   }, [])
 
+  // ⬇️ Aquí normalizamos el usuario recién creado desde la API
   const handleAddStaff = (nuevoDesdeApi) => {
-    setStaff((prev) => [...prev, nuevoDesdeApi])
+    if (!nuevoDesdeApi) return
+
+    const rolCodigo = nuevoDesdeApi.rol || ""
+    const cargoLabel =
+      rolCodigo === "ADMIN"
+        ? "administrador"
+        : rolCodigo
+        ? rolCodigo.toLowerCase()
+        : "sin rol"
+
+    const normalizado = {
+      id: nuevoDesdeApi.id,
+      nombre: nuevoDesdeApi.nombre_completo,
+      email: nuevoDesdeApi.email,
+      telefono: nuevoDesdeApi.telefono || "",
+      cargo: cargoLabel,
+      rolCodigo,
+      rut: nuevoDesdeApi.rut,
+      fechaContratacion: nuevoDesdeApi.created_at
+        ? nuevoDesdeApi.created_at.slice(0, 10)
+        : "",
+      estado: nuevoDesdeApi.activo ? "activo" : "inactivo",
+      rol_id: nuevoDesdeApi.rol_id ?? null,
+    }
+
+    setStaff((prev) => [...prev, normalizado])
     setIsModalOpen(false)
 
-    // Mostrar tarjeta de validación
     setToastTitle("Usuario creado")
-    setToastMessage(`El usuario "${nuevoDesdeApi.nombre}" fue registrado correctamente.`)
+    setToastMessage(`El usuario "${normalizado.nombre}" fue registrado correctamente.`)
     setToastOpen(true)
   }
 
