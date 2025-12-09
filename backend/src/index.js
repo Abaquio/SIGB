@@ -8,6 +8,7 @@ import barrilesRouter from "./routes/barriles.js";
 import lecturasQrRouter from "./routes/lecturasQr.js";
 import categoriasCervezaRouter from "./routes/categoriasCerveza.js";
 import bodegasRouter from "./routes/bodegas.js";
+import movimientosRoutes from "./routes/movimientos.js"
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -51,6 +52,7 @@ app.use("/api/barriles", barrilesRouter);
 app.use("/api/lecturas-qr", lecturasQrRouter);
 app.use("/api/categorias-cerveza", categoriasCervezaRouter);
 app.use("/api/bodegas", bodegasRouter);
+app.use("/api/movimientos", movimientosRoutes)
 
 // 404
 app.use((_req, res) => {
