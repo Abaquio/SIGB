@@ -10,6 +10,8 @@ import categoriasCervezaRouter from "./routes/categoriasCerveza.js";
 import bodegasRouter from "./routes/bodegas.js";
 import movimientosRoutes from "./routes/movimientos.js"
 import reportesRoutes from "./routes/reportes.js"
+import ventasRouter from "./routes/ventas.js"
+import devolucionesRouter from "./routes/devoluciones.js"
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -55,6 +57,8 @@ app.use("/api/categorias-cerveza", categoriasCervezaRouter);
 app.use("/api/bodegas", bodegasRouter);
 app.use("/api/movimientos", movimientosRoutes)
 app.use("/api/reportes", reportesRoutes)
+app.use("/api/ventas", ventasRouter)
+app.use("/api/devoluciones", devolucionesRouter)
 
 // 404
 app.use((_req, res) => {
