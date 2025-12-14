@@ -311,6 +311,11 @@ router.post("/", async (req, res, next) => {
       ? await ensureBodega(ubicacion_actual)
       : null;
 
+    // ✅ NUEVO: al crear, litros_restantes parte igual a capacidad_litros
+    // (si viene null/undefined, lo dejamos null para no inventar datos)
+    const cap = capacidad_litros ?? null;
+    const litrosIniciales = cap === null ? null : Number(cap);
+
     const { data, error } = await supabase
       .from("barriles")
       .insert([
@@ -318,7 +323,8 @@ router.post("/", async (req, res, next) => {
           codigo_interno,
           codigo_qr,
           categoria_cerveza_id,
-          capacidad_litros: capacidad_litros ?? null,
+          capacidad_litros: cap,
+          litros_restantes: litrosIniciales, // ✅ AQUÍ ESTÁ EL FIX
           estado_actual: estado_actual || "DISPONIBLE",
           ubicacion_actual: ubicacion_actual || null,
           bodega_id,

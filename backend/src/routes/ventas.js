@@ -13,6 +13,12 @@ function getUsuarioIdFromReq(req) {
   const headerId = req.headers["x-user-id"] || req.headers["x-userid"]
   const parsedHeader = headerId ? Number(headerId) : null
   if (Number.isFinite(parsedHeader)) return parsedHeader
+
+  // ✅ Fallback: el frontend (POS) manda usuario_id en el body
+  const bodyId = req?.body?.usuario_id
+  const parsedBody = bodyId !== undefined && bodyId !== null ? Number(bodyId) : null
+  if (Number.isFinite(parsedBody)) return parsedBody
+
   if (req.user && req.user.id) return Number(req.user.id)
   return null
 }
@@ -26,6 +32,19 @@ function getClientInfo(req) {
   const userAgent = req.headers["user-agent"] || null
 
   return { ip: rawIp, userAgent }
+}
+
+function formatCLP(value) {
+  const n = Number(value || 0)
+  try {
+    return n.toLocaleString("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    })
+  } catch {
+    return `$${Math.round(n).toLocaleString("es-CL")}`
+  }
 }
 
 // Auditoría GENERAL (tabla auditoria, modulo = 'ventas')
@@ -120,11 +139,6 @@ async function registrarMovimientoVenta(req, barrilId, ventaId, payload) {
    LÓGICA DE LITROS RESTANTES
    ====================================================================== */
 
-/**
- * Descuenta litros de un barril.
- * - Si litrosVendidos > 0 => litros_restantes = max(0, litros_restantes - litrosVendidos)
- * - Si llega a 0 => estado_actual = 'AGOTADO' (opcional)
- */
 async function descontarLitrosDeBarril(barrilId, litrosVendidos) {
   try {
     if (!barrilId || !litrosVendidos || litrosVendidos <= 0) return
@@ -167,11 +181,6 @@ async function descontarLitrosDeBarril(barrilId, litrosVendidos) {
   }
 }
 
-/**
- * Vende el barril completo:
- * - deja litros_restantes = 0
- * - marca estado_actual = 'AGOTADO'
- */
 async function vaciarBarril(barrilId) {
   try {
     if (!barrilId) return
@@ -206,7 +215,7 @@ router.get("/", async (req, res, next) => {
     let query = supabase
       .from("ventas")
       .select(
-        "*, clientes(nombre,rut), bodegas(nombre), venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)"
+        "*, usuarios(nombre_completo,rol), clientes(nombre,rut), bodegas(nombre), venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)"
       )
       .order("fecha_hora", { ascending: false })
 
@@ -231,34 +240,6 @@ router.get("/", async (req, res, next) => {
 })
 
 /**
- * GET /api/ventas/siguiente-numero
- *  -> devuelve el próximo correlativo basado en MAX(id) + 1
- *     (si no hay ventas, devuelve 1)
- */
-router.get("/siguiente-numero", async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from("ventas")
-      .select("id")
-      .order("id", { ascending: false })
-      .limit(1)
-
-    if (error) {
-      console.error("❌ Error obteniendo siguiente numero de venta:", error)
-      return res.status(500).json({ error: "Error obteniendo correlativo" })
-    }
-
-    const lastId = data && data.length > 0 ? data[0].id : 0
-    const nextNumero = (lastId || 0) + 1
-
-    return res.json({ nextNumero })
-  } catch (err) {
-    console.error("❌ Error inesperado obteniendo siguiente numero de venta:", err)
-    return res.status(500).json({ error: "Error obteniendo correlativo" })
-  }
-})
-
-/**
  * GENERAR BOLETA PDF: GET /api/ventas/pdf/:id
  */
 router.get("/pdf/:id", async (req, res) => {
@@ -268,7 +249,6 @@ router.get("/pdf/:id", async (req, res) => {
       return res.status(400).json({ error: "ID inválido" });
     }
 
-    // 1) OBTENER VENTA
     const { data: venta, error: errorVenta } = await supabase
       .from("ventas")
       .select("*, clientes(nombre,rut), bodegas(nombre)")
@@ -284,7 +264,6 @@ router.get("/pdf/:id", async (req, res) => {
       return res.status(404).json({ error: "Venta no encontrada" });
     }
 
-    // 2) OBTENER DETALLE
     const { data: detalle, error: errorDetalle } = await supabase
       .from("venta_detalle")
       .select("*")
@@ -295,7 +274,6 @@ router.get("/pdf/:id", async (req, res) => {
       return res.status(500).json({ error: "Error obteniendo detalle" });
     }
 
-    // 3) OBTENER BARRILES
     const barrilIds = [
       ...new Set(detalle.map((d) => d.barril_id).filter(Boolean)),
     ];
@@ -317,7 +295,6 @@ router.get("/pdf/:id", async (req, res) => {
       }
     }
 
-    // ============ INICIO PDF ============
     const doc = new PDFDocument({ margin: 40 });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -328,7 +305,6 @@ router.get("/pdf/:id", async (req, res) => {
 
     doc.pipe(res);
 
-    // ENCABEZADO
     doc
       .fontSize(22)
       .text("BrewMaster - Recibo de Venta", { align: "center" })
@@ -340,7 +316,6 @@ router.get("/pdf/:id", async (req, res) => {
       .text(`Fecha: ${new Date(venta.fecha_hora).toLocaleString()}`)
       .moveDown();
 
-    // CLIENTE
     doc.fontSize(16).text("Datos del Cliente", { underline: true });
     doc.fontSize(12);
 
@@ -354,54 +329,138 @@ router.get("/pdf/:id", async (req, res) => {
 
     doc.moveDown();
 
-    // DETALLE
     doc.fontSize(16).text("Detalle de la Venta", { underline: true });
     doc.moveDown();
 
+    let total = 0;
+
     detalle.forEach((item) => {
-      const barril = barrilesMap[item.barril_id] || {};
-      const nombreCerveza = barril.tipo_cerveza || "Cerveza";
-      const codigoInterno = barril.codigo_interno || "—";
+      const barrilInfo = barrilesMap[item.barril_id] || {};
+      const nombre = barrilInfo.tipo_cerveza || "Barril";
+      const codigo = barrilInfo.codigo_interno || item.barril_id;
 
       doc
         .fontSize(12)
-        .text(`${nombreCerveza} | Barril ${codigoInterno}`)
+        .text(`${nombre} (${codigo})`)
         .text(
-          `Cantidad: ${item.cantidad} ${item.unidad} — Precio unit: $${Number(
+          `Cantidad: ${item.cantidad} ${item.unidad} - P. Unit: $${Number(
             item.precio_unitario
           ).toLocaleString()}`
         )
-        .text(
-          `Subtotal: $${Number(item.subtotal || 0).toLocaleString()}`
-        )
+        .text(`Subtotal: $${Number(item.subtotal).toLocaleString()}`)
         .moveDown(0.5);
+
+      total += Number(item.subtotal) || 0;
     });
 
     doc.moveDown();
 
-    // TOTALES
-    doc.fontSize(16).text("Totales", { underline: true });
-    doc.moveDown(0.5);
-
-    doc.fontSize(12);
-    doc.text(
-      `Total Bruto: $${Number(venta.total_bruto || 0).toLocaleString()}`
-    );
-    doc.text(
-      `Descuento: $${Number(venta.descuento_total || 0).toLocaleString()}`
-    );
-    doc.text(
-      `Total Neto: $${Number(venta.total_neto || 0).toLocaleString()}`
-    );
-
-    doc.moveDown(2);
-
-    doc.fontSize(13).text("Gracias por su compra", { align: "center" });
+    doc
+      .fontSize(14)
+      .text(`TOTAL: $${Number(total).toLocaleString()}`, { align: "right" });
 
     doc.end();
   } catch (err) {
-    console.error("❌ Error generando PDF:", err);
+    console.error("Error generando PDF:", err);
     res.status(500).json({ error: "Error generando PDF" });
+  }
+})
+
+/**
+ * EXPORTAR PDF POR DÍA: GET /api/ventas/pdf-dia?dia=YYYY-MM-DD&caja_id?
+ * - Genera un resumen del día (tabla + total) y permite filtrar por caja_id.
+ */
+router.get("/pdf-dia", async (req, res) => {
+  try {
+    const { dia, caja_id } = req.query
+
+    const diaStr = String(dia || "").trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(diaStr)) {
+      return res.status(400).json({ error: "Parámetro 'dia' inválido (YYYY-MM-DD)" })
+    }
+
+    const start = new Date(`${diaStr}T00:00:00.000Z`)
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + 1)
+
+    let query = supabase
+      .from("ventas")
+      .select(
+        "id, fecha_hora, tipo_documento, numero_documento, metodo_pago, total_bruto, descuento_total, total_neto, estado, observaciones, caja_id, usuarios(nombre_completo,rol)"
+      )
+      .gte("fecha_hora", start.toISOString())
+      .lt("fecha_hora", end.toISOString())
+      .order("fecha_hora", { ascending: false })
+
+    const cajaIdNum =
+      caja_id !== undefined && caja_id !== null && String(caja_id).trim() !== ""
+        ? Number(caja_id)
+        : null
+
+    if (Number.isFinite(cajaIdNum)) {
+      query = query.eq("caja_id", cajaIdNum)
+    }
+
+    const { data: ventasDia, error } = await query
+    if (error) {
+      console.error("❌ Error Supabase en GET /api/ventas/pdf-dia:", error)
+      return res.status(500).json({ error: "Error generando PDF del día", details: error.message })
+    }
+
+    const lista = Array.isArray(ventasDia) ? ventasDia : []
+    const totalDia = lista.reduce((s, v) => s + Number(v?.total_neto ?? v?.total_bruto ?? 0), 0)
+
+    const doc = new PDFDocument({ margin: 40 })
+    res.setHeader("Content-Type", "application/pdf")
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="reporte_ventas_${diaStr}${Number.isFinite(cajaIdNum) ? `_caja_${cajaIdNum}` : ""}.pdf"`
+    )
+    doc.pipe(res)
+
+    doc.fontSize(20).text("BrewMaster - Reporte de Ventas (Día)", { align: "center" }).moveDown(0.5)
+    doc
+      .fontSize(12)
+      .text(`Día: ${diaStr}${Number.isFinite(cajaIdNum) ? `  |  Caja: #${cajaIdNum}` : ""}`)
+      .text(`Total día: ${formatCLP(totalDia)}`)
+      .moveDown(1)
+
+    doc.fontSize(11).text("Fecha", 40, doc.y, { continued: true })
+    doc.text("Documento", 150, doc.y, { continued: true })
+    doc.text("Usuario (rol)", 270, doc.y, { continued: true })
+    doc.text("Pago", 400, doc.y, { continued: true })
+    doc.text("Total", 470, doc.y)
+    doc.moveDown(0.3)
+    doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#666").stroke()
+    doc.moveDown(0.5)
+
+    lista.forEach((v) => {
+      const fechaTxt = v?.fecha_hora ? new Date(v.fecha_hora).toLocaleString("es-CL") : "-"
+      const docTxt = `${v?.tipo_documento || "—"}${v?.numero_documento ? ` #${v.numero_documento}` : ""}`
+      const userName = v?.usuarios?.nombre_completo || (v?.usuario_id ? `Usuario #${v.usuario_id}` : "—")
+      const userRol = (v?.usuarios?.rol || "—").toString().toUpperCase()
+      const userTxt = `${userName} (${userRol})`
+      const pagoTxt = (v?.metodo_pago || "OTRO").toString().toUpperCase()
+      const totalTxt = formatCLP(v?.total_neto ?? v?.total_bruto ?? 0)
+
+      const y = doc.y
+      doc.fontSize(10).fillColor("#000")
+      doc.text(fechaTxt, 40, y, { width: 110 })
+      doc.text(docTxt, 150, y, { width: 110 })
+      doc.text(userTxt, 270, y, { width: 125 })
+      doc.text(pagoTxt, 400, y, { width: 60 })
+      doc.text(totalTxt, 470, y, { width: 85, align: "right" })
+      doc.moveDown(0.4)
+
+      if (doc.y > 740) {
+        doc.addPage()
+      }
+    })
+
+    doc.end()
+  } catch (err) {
+    console.error("❌ Error inesperado en GET /api/ventas/pdf-dia:", err)
+    return res.status(500).json({ error: "Error inesperado generando PDF" })
   }
 })
 
@@ -417,82 +476,22 @@ router.get("/folio/:folio", async (req, res, next) => {
       return res.status(400).json({ error: "Folio inválido" })
     }
 
-    // 1) Venta + cliente + bodega
-    const { data: venta, error: ventaError } = await supabase
+    const { data, error } = await supabase
       .from("ventas")
-      .select("*, clientes(nombre,rut), bodegas(nombre)")
+      .select(
+        "*, clientes(nombre,rut), bodegas(nombre), venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)"
+      )
       .eq("numero_documento", folio)
       .maybeSingle()
 
-    if (ventaError) {
-      console.error("❌ Error Supabase buscando venta por folio:", ventaError)
-      return res.status(500).json({
-        error: "Error al obtener la venta",
-        details: ventaError.message,
-      })
+    if (error) {
+      console.error("❌ Error Supabase en GET /api/ventas/folio/:folio:", error)
+      return res.status(500).json({ error: "Error al buscar venta", details: error.message })
     }
 
-    if (!venta) {
-      return res.status(404).json({ error: "Venta no encontrada" })
-    }
+    if (!data) return res.status(404).json({ error: "Venta no encontrada" })
 
-    // 2) Detalle de la venta
-    const { data: detalle, error: detError } = await supabase
-      .from("venta_detalle")
-      .select("*")
-      .eq("venta_id", venta.id)
-
-    if (detError) {
-      console.error(
-        "❌ Error Supabase obteniendo detalle de venta por folio:",
-        detError
-      )
-      return res.status(500).json({
-        error: "Error al obtener el detalle de la venta",
-        details: detError.message,
-      })
-    }
-
-    // 3) Barriles asociados para mostrar nombres/códigos
-    const barrilIds = Array.from(
-      new Set((detalle || []).map((d) => d.barril_id).filter(Boolean))
-    )
-
-    let barrilesMap = {}
-    if (barrilIds.length > 0) {
-      const { data: barriles, error: barrilError } = await supabase
-        .from("barriles")
-        .select("id,codigo_interno,tipo_cerveza,capacidad_litros")
-        .in("id", barrilIds)
-
-      if (barrilError) {
-        console.error(
-          "⚠️ Error Supabase obteniendo barriles para venta por folio:",
-          barrilError
-        )
-      } else {
-        barrilesMap = Object.fromEntries(
-          (barriles || []).map((b) => [b.id, b])
-        )
-      }
-    }
-
-    const detallesEnriquecidos = (detalle || []).map((d) => {
-      const barrilInfo = barrilesMap[d.barril_id] || {}
-      return {
-        ...d,
-        barril_nombre: barrilInfo.tipo_cerveza || "Barril",
-        barril_codigo: barrilInfo.codigo_interno || null,
-      }
-    })
-
-    return res.json({
-      ...venta,
-      cliente_nombre: venta.clientes?.nombre || null,
-      cliente_rut: venta.clientes?.rut || null,
-      bodega_nombre: venta.bodegas?.nombre || null,
-      detalles: detallesEnriquecidos,
-    })
+    res.json(data)
   } catch (err) {
     console.error("❌ Error inesperado en GET /api/ventas/folio/:folio:", err)
     next(err)
@@ -500,39 +499,26 @@ router.get("/folio/:folio", async (req, res, next) => {
 })
 
 /**
- * GET /api/ventas/:id
+ * GET /api/ventas/siguiente-numero
  */
-router.get("/:id", async (req, res, next) => {
+router.get("/siguiente-numero", async (req, res) => {
   try {
-    const id = Number(req.params.id)
-    if (!id) {
-      return res.status(400).json({ error: "ID de venta inválido" })
-    }
-
     const { data, error } = await supabase
       .from("ventas")
-      .select(
-        "*, clientes(nombre,rut), bodegas(nombre), venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)"
-      )
-      .eq("id", id)
-      .maybeSingle()
+      .select("id")
+      .order("id", { ascending: false })
+      .limit(1)
 
     if (error) {
-      console.error("❌ Error Supabase en GET /api/ventas/:id:", error)
-      return res.status(500).json({
-        error: "Error al obtener la venta",
-        details: error.message,
-      })
+      console.error("❌ Error Supabase en /siguiente-numero:", error)
+      return res.status(500).json({ error: "Error obteniendo correlativo" })
     }
 
-    if (!data) {
-      return res.status(404).json({ error: "Venta no encontrada" })
-    }
-
-    res.json(data)
+    const lastId = data?.[0]?.id ? Number(data[0].id) : 0
+    res.json({ nextNumero: lastId + 1 })
   } catch (err) {
-    console.error("❌ Error inesperado en GET /api/ventas/:id:", err)
-    next(err)
+    console.error("❌ Error inesperado en /siguiente-numero:", err)
+    res.status(500).json({ error: "Error obteniendo correlativo" })
   }
 })
 
@@ -542,6 +528,7 @@ router.get("/:id", async (req, res, next) => {
 router.post("/", async (req, res, next) => {
   try {
     const {
+      caja_id,
       cliente_id,
       bodega_id,
       tipo_documento,
@@ -560,7 +547,11 @@ router.post("/", async (req, res, next) => {
       return res.status(400).json({ error: "tipo_documento es requerido" })
     }
 
-    // Calcular totales
+    const cajaId =
+      caja_id === null || caja_id === undefined || String(caja_id).trim() === ""
+        ? null
+        : Number(caja_id)
+
     let total_bruto = 0
     const detalleItems = items.map((item) => {
       const cantidad = Number(item.cantidad) || 0
@@ -580,12 +571,12 @@ router.post("/", async (req, res, next) => {
     const desc = Number(descuento_total) || 0
     const total_neto = total_bruto - desc
 
-    // 1) Insert en VENTAS
     const { data: venta, error: ventaError } = await supabase
       .from("ventas")
       .insert([
         {
-          usuario_id: getUsuarioIdFromReq(req),
+          caja_id: Number.isFinite(cajaId) ? cajaId : null,
+          usuario_id: getUsuarioIdFromReq(req), // ✅ ahora sí toma body.usuario_id
           cliente_id: cliente_id || null,
           bodega_id: bodega_id || null,
           tipo_documento,
@@ -611,7 +602,6 @@ router.post("/", async (req, res, next) => {
 
     const ventaId = venta.id
 
-    // 2) Insert en VENTA_DETALLE
     const detalleConVenta = detalleItems.map((d) => ({
       ...d,
       venta_id: ventaId,
@@ -629,7 +619,6 @@ router.post("/", async (req, res, next) => {
       })
     }
 
-    // 3) Registrar movimientos (salida de stock) y descontar litros
     for (const d of detalleConVenta) {
       const barrilId = d.barril_id
 
@@ -650,7 +639,6 @@ router.post("/", async (req, res, next) => {
       }
     }
 
-    // 4) Auditoría general
     await registrarAuditoriaVentas({
       req,
       accion: "CREAR",
@@ -662,7 +650,6 @@ router.post("/", async (req, res, next) => {
       },
     })
 
-    // 5) Devolver venta + items
     res.status(201).json({
       ...venta,
       items: detalleItems,

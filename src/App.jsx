@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 
 // Layout y páginas
@@ -30,6 +30,22 @@ function App() {
       return null
     }
   })
+
+  // ✅ Detectar "login real" (transición null -> usuario) para forzar /inicio
+  const prevUsuarioRef = useRef(usuario)
+
+  useEffect(() => {
+    const prev = prevUsuarioRef.current
+
+    // Solo cuando se inicia sesión (antes NO había usuario y ahora sí)
+    if (!prev && usuario) {
+      setActiveNav("inicio")
+      navigate("/inicio", { replace: true })
+    }
+
+    prevUsuarioRef.current = usuario
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario])
 
   const handleLogout = () => {
     try {

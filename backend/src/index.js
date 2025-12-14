@@ -15,6 +15,7 @@ import devolucionesRouter from "./routes/devoluciones.js"
 import usuariosRouter from "./routes/usuarios.js"
 import rolesRouter from "./routes/roles.js"
 import authRoutes from "./routes/auth.js"
+import cajaRoutes from "./routes/caja.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -66,7 +67,7 @@ app.use("/api/devoluciones", devolucionesRouter)
 app.use("/api/usuarios", usuariosRouter)
 app.use("/api/usuarios", usuariosRouter)
 app.use("/api/roles", rolesRouter)
-
+app.use("/api/caja", cajaRoutes);
 
 // 404
 app.use((_req, res) => {
