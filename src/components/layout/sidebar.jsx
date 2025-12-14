@@ -12,7 +12,7 @@ export default function Sidebar({
   // 🔐 Menú por rol
   const navItemsByRole = {
     VENDEDOR: [
-      //{ id: "inicio", label: "Inicio", emoji: "🏠" },
+      { id: "inicio", label: "Inicio", emoji: "🏠" },
       { id: "pos", label: "Ventas", emoji: "💳" },
       { id: "devoluciones", label: "Devoluciones", emoji: "↩️" },
     ],
@@ -23,7 +23,7 @@ export default function Sidebar({
       { id: "movimientos", label: "Movimientos", emoji: "📊" },
     ],
     SUPERVISOR: [
-      //{ id: "inicio", label: "Inicio", emoji: "🏠" },
+      { id: "inicio", label: "Inicio", emoji: "🏠" },
       { id: "pos", label: "Ventas", emoji: "💳" },
       { id: "devoluciones", label: "Devoluciones", emoji: "↩️" },
       { id: "barriles", label: "Barriles", emoji: "🛢️" },
@@ -34,7 +34,7 @@ export default function Sidebar({
       { id: "alertas", label: "Alertas", emoji: "🚨" },
     ],
     ADMIN: [
-      //{ id: "inicio", label: "Inicio", emoji: "🏠" },
+      { id: "inicio", label: "Inicio", emoji: "🏠" },
       { id: "pos", label: "Ventas", emoji: "💳" },
       { id: "devoluciones", label: "Devoluciones", emoji: "↩️" },
       { id: "barriles", label: "Barriles", emoji: "🛢️" },
