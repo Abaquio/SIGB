@@ -63,7 +63,7 @@ export default function POSPage() {
   const [showEleccionModal, setShowEleccionModal] = useState(false)
   const [selectedBarriles, setSelectedBarriles] = useState([])
 
-  const [showHistorialModal, setShowHistorialModal] = useState(false) // ✅ NUEVO
+  const [showHistorialModal, setShowHistorialModal] = useState(false)
 
   // =========================================
   // ✅ Eventos desde TopBar (súper robusto)
@@ -71,24 +71,24 @@ export default function POSPage() {
   useEffect(() => {
     const openCaja = () => setShowCajaModal(true)
     const openBarriles = () => setShowEleccionModal(true)
-    const openHistorial = () => setShowHistorialModal(true) // ✅ NUEVO
+    const openHistorial = () => setShowHistorialModal(true)
 
     window.addEventListener("open-caja-modal", openCaja)
     window.addEventListener("open-barriles-modal", openBarriles)
-    window.addEventListener("open-historial-ventas", openHistorial) // ✅ NUEVO
+    window.addEventListener("open-historial-ventas", openHistorial)
 
     window.__openCajaModal = openCaja
     window.__openBarrilesModal = openBarriles
-    window.__openHistorialVentasModal = openHistorial // ✅ NUEVO
+    window.__openHistorialVentasModal = openHistorial
 
     return () => {
       window.removeEventListener("open-caja-modal", openCaja)
       window.removeEventListener("open-barriles-modal", openBarriles)
-      window.removeEventListener("open-historial-ventas", openHistorial) // ✅ NUEVO
+      window.removeEventListener("open-historial-ventas", openHistorial)
       try {
         delete window.__openCajaModal
         delete window.__openBarrilesModal
-        delete window.__openHistorialVentasModal // ✅ NUEVO
+        delete window.__openHistorialVentasModal
       } catch {}
     }
   }, [])
@@ -105,8 +105,6 @@ export default function POSPage() {
       }
       const data = await res.json()
 
-      // ✅ FIX CLAVE:
-      // Si el endpoint devuelve una caja CERRADA (o null), aquí la tratamos como "no hay caja abierta".
       const caja = data && isCajaAbierta(data) ? data : null
 
       setCajaActual(caja)
@@ -297,14 +295,50 @@ export default function POSPage() {
     setSearchTerm("")
   }
 
-  // Totales
+  // =========================================
+  // ✅ Totales + límites de descuento
+  // =========================================
   const subtotal = carrito.reduce(
     (s, it) => s + (it.precioShop || 0) * (it.cantidadShops || 0),
     0
   )
-  const desc1 = descuentoPorcentaje > 0 ? (subtotal * descuentoPorcentaje) / 100 : 0
-  const desc2 = descuentoMonto > 0 && descuentoMonto < 1000000 ? descuentoMonto : 0
+
+  // porcentaje 0..100
+  const pctSafe = Math.min(100, Math.max(0, Number(descuentoPorcentaje) || 0))
+  const descPctCalc = pctSafe > 0 ? (subtotal * pctSafe) / 100 : 0
+
+  // monto no puede superar lo que queda luego del %
+  const maxMontoPermitido = Math.max(0, subtotal - descPctCalc)
+  const montoSafe = Math.min(maxMontoPermitido, Math.max(0, Number(descuentoMonto) || 0))
+
+  const desc1 = descPctCalc
+  const desc2 = montoSafe
+
   const total = Math.max(0, subtotal - desc1 - desc2)
+
+  // ✅ si se cambia el % y el monto quedó pasado, lo ajustamos automáticamente
+  useEffect(() => {
+    const pctN = Math.min(100, Math.max(0, Number(descuentoPorcentaje) || 0))
+    if (pctN !== descuentoPorcentaje) setDescuentoPorcentaje(pctN)
+
+    const descPct = pctN > 0 ? (subtotal * pctN) / 100 : 0
+    const maxMonto = Math.max(0, subtotal - descPct)
+
+    const montoN = Math.max(0, Number(descuentoMonto) || 0)
+    if (montoN > maxMonto) setDescuentoMonto(maxMonto)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descuentoPorcentaje, subtotal])
+
+  // ✅ si se cambia el monto y se pasa, se ajusta
+  useEffect(() => {
+    const pctN = Math.min(100, Math.max(0, Number(descuentoPorcentaje) || 0))
+    const descPct = pctN > 0 ? (subtotal * pctN) / 100 : 0
+    const maxMonto = Math.max(0, subtotal - descPct)
+
+    const montoN = Math.max(0, Number(descuentoMonto) || 0)
+    if (montoN > maxMonto) setDescuentoMonto(maxMonto)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descuentoMonto, subtotal])
 
   const obtenerNumeroBoleta = async () => {
     try {
@@ -418,7 +452,6 @@ export default function POSPage() {
   }
 
   const onCajaChange = async (caja) => {
-    // ✅ Si el modal te manda una caja cerrada o null, aquí dejamos null.
     const cajaAbierta = caja && isCajaAbierta(caja) ? caja : null
     setCajaActual(cajaAbierta)
 
@@ -682,8 +715,10 @@ export default function POSPage() {
                     <label className="text-sm text-foreground">Descuento (%)</label>
                     <input
                       type="number"
+                      min={0}
+                      max={100}
                       value={descuentoPorcentaje}
-                      onChange={(e) => setDescuentoPorcentaje(Math.max(0, Number(e.target.value)))}
+                      onChange={(e) => setDescuentoPorcentaje(e.target.value)}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded text-sm text-foreground"
                       placeholder="0"
                     />
@@ -693,11 +728,16 @@ export default function POSPage() {
                     <label className="text-sm text-foreground">Descuento ($)</label>
                     <input
                       type="number"
+                      min={0}
+                      max={Math.max(0, subtotal - (pctSafe > 0 ? (subtotal * pctSafe) / 100 : 0))}
                       value={descuentoMonto}
-                      onChange={(e) => setDescuentoMonto(Math.min(1000000, Number(e.target.value)))}
+                      onChange={(e) => setDescuentoMonto(e.target.value)}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded text-sm text-foreground"
                       placeholder="0"
                     />
+                    <p className="text-xs text-foreground/50">
+                      Máximo permitido: ${maxMontoPermitido.toLocaleString()}
+                    </p>
                   </div>
 
                   <div className="flex justify-between text-sm">
@@ -706,7 +746,9 @@ export default function POSPage() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-foreground/70">Descuento:</span>
-                    <span className="text-foreground font-medium">-${(desc1 + desc2).toLocaleString()}</span>
+                    <span className="text-foreground font-medium">
+                      -${(desc1 + desc2).toLocaleString()}
+                    </span>
                   </div>
                   <div className="flex justify-between text-lg font-bold">
                     <span className="text-foreground">Total:</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 
 // Layout y páginas
@@ -31,16 +31,68 @@ function App() {
     }
   })
 
-  // ✅ Detectar "login real" (transición null -> usuario) para forzar /inicio
+  // ✅ Detectar "login real" (transición null -> usuario) para forzar navegación inicial
   const prevUsuarioRef = useRef(usuario)
+
+  // ====== PERMISOS POR ROL ======
+  // Nota: usa usuario.rol (si en tu sesión es rolCodigo, cámbialo en getRol)
+  const permisosPorRol = useMemo(
+    () => ({
+      VENDEDOR: ["inicio", "pos", "devoluciones"],
+      OPERARIO: ["barriles", "escanear", "bodegas", "movimientos"],
+      SUPERVISOR: [
+        "inicio",
+        "pos",
+        "devoluciones",
+        "barriles",
+        "escanear",
+        "bodegas",
+        "movimientos",
+        "historial-ventas",
+        "reportes",
+        "alertas",
+      ],
+      ADMIN: [
+        "inicio",
+        "pos",
+        "devoluciones",
+        "barriles",
+        "escanear",
+        "bodegas",
+        "movimientos",
+        "historial-ventas",
+        "reportes",
+        "alertas",
+        "staff",
+      ],
+    }),
+    []
+  )
+
+  const getRol = (u) => {
+    // Si tu sesión usa rolCodigo, cambia a: return u?.rolCodigo
+    return u?.rol
+  }
+
+  const getPermitidos = (u) => {
+    const rol = getRol(u)
+    return permisosPorRol[rol] || []
+  }
+
+  const firstAllowedNav = (u) => {
+    const permitidos = getPermitidos(u)
+    // fallback sensato si algo raro pasa
+    return permitidos[0] || "inicio"
+  }
 
   useEffect(() => {
     const prev = prevUsuarioRef.current
 
     // Solo cuando se inicia sesión (antes NO había usuario y ahora sí)
     if (!prev && usuario) {
-      setActiveNav("inicio")
-      navigate("/inicio", { replace: true })
+      const first = firstAllowedNav(usuario)
+      setActiveNav(first)
+      navigate(first === "inicio" ? "/inicio" : navToPath(first), { replace: true })
     }
 
     prevUsuarioRef.current = usuario
@@ -141,6 +193,27 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname])
 
+  // ✅ GUARD: bloquear secciones según rol (para URL manual y para clicks)
+  useEffect(() => {
+    if (!usuario) return
+    if (location.pathname === "/login") return
+
+    const permitidos = getPermitidos(usuario)
+    if (permitidos.length === 0) return
+
+    if (!permitidos.includes(activeNav)) {
+      const fallback = permitidos[0]
+      if (activeNav !== fallback) {
+        setActiveNav(fallback)
+      }
+      const fallbackPath = navToPath(fallback)
+      if (location.pathname !== fallbackPath) {
+        navigate(fallbackPath, { replace: true })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario, activeNav, location.pathname])
+
   // Cuando cambia el nav, navegamos a la ruta correspondiente
   useEffect(() => {
     // Si no hay usuario o estamos en login, no forzamos navegación
@@ -221,6 +294,7 @@ function App() {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
       onLogout={handleLogout}
+      usuario={usuario} // ✅ (si tu layout/sidebar lo usa, perfecto; si no, no rompe nada)
     >
       {renderPage()}
     </Layout>
