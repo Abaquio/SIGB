@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000"
 
@@ -11,7 +11,10 @@ export default function StaffDetalleModal({
   roles = [],
   onUpdated,
 }) {
+  // ✅ Hooks SIEMPRE arriba
   const [editMode, setEditMode] = useState(false)
+  const [saving, setSaving] = useState(false)
+
   const [formData, setFormData] = useState({
     nombre: "",
     email: "",
@@ -23,25 +26,72 @@ export default function StaffDetalleModal({
     fechaContratacion: "",
     estado: "activo",
   })
-  const [saving, setSaving] = useState(false)
 
+  // ✅ Actividad
+  const [actividad, setActividad] = useState([])
+  const [actLoading, setActLoading] = useState(false)
+  const [actError, setActError] = useState("")
+  const [verTodo, setVerTodo] = useState(false) // ✅ expand/collapse
+
+  // ---------------------------
+  // Sync datos al abrir
+  // ---------------------------
   useEffect(() => {
-    if (staff && isOpen) {
-      setFormData({
-        nombre: staff.nombre || "",
-        email: staff.email || "",
-        telefono: staff.telefono || "",
-        cargo: staff.cargo || "",
-        rolCodigo: staff.rolCodigo || "",
-        rol_id: staff.rol_id ?? null,
-        rut: staff.rut || "",
-        fechaContratacion: staff.fechaContratacion || "",
-        estado: staff.estado || "activo",
-      })
-      setEditMode(false)
-    }
+    if (!isOpen || !staff) return
+
+    setFormData({
+      nombre: staff.nombre || "",
+      email: staff.email || "",
+      telefono: staff.telefono || "",
+      cargo: staff.cargo || "",
+      rolCodigo: staff.rolCodigo || "",
+      rol_id: staff.rol_id ?? null,
+      rut: staff.rut || "",
+      fechaContratacion: staff.fechaContratacion || "",
+      estado: staff.estado || "activo",
+    })
+
+    setEditMode(false)
   }, [staff, isOpen])
 
+  // ---------------------------
+  // Cargar actividad al abrir
+  // ---------------------------
+  useEffect(() => {
+    if (!isOpen || !staff?.id) return
+
+    const load = async () => {
+      try {
+        setActLoading(true)
+        setActError("")
+        const res = await fetch(`${API_URL}/api/usuarios/${staff.id}/actividad?limit=50`)
+        const data = await res.json().catch(() => null)
+
+        if (!res.ok) {
+          setActError(data?.error || "No se pudo cargar la actividad.")
+          setActividad([])
+          return
+        }
+
+        setActividad(Array.isArray(data) ? data : [])
+      } catch (e) {
+        setActError("No se pudo cargar la actividad.")
+        setActividad([])
+      } finally {
+        setActLoading(false)
+      }
+    }
+
+    load()
+  }, [isOpen, staff?.id])
+
+  // ✅ lista comprimida a 3 por defecto
+  const actividadUI = useMemo(() => {
+    if (!Array.isArray(actividad)) return []
+    return verTodo ? actividad : actividad.slice(0, 3)
+  }, [actividad, verTodo])
+
+  // ✅ Recién después de hooks
   if (!isOpen || !staff) return null
 
   const cargoEmoji = {
@@ -56,17 +106,24 @@ export default function StaffDetalleModal({
     asistente: "🤝",
   }
 
+  const badgeForTipo = (tipo, titulo) => {
+    const t = String(tipo || "").toUpperCase()
+    if (t === "LOGIN") {
+      const ok = String(titulo || "").includes("ÉXITO")
+      return ok
+        ? "bg-green-500/10 border-green-500/30 text-green-300"
+        : "bg-red-500/10 border-red-500/30 text-red-300"
+    }
+    if (t === "MOVIMIENTOS") return "bg-blue-500/10 border-blue-500/30 text-blue-200"
+    return "bg-secondary border-border text-foreground/80"
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target
 
-    // Teléfono similar a nuevoStaff: +56 fijo
     if (name === "telefono") {
       let digits = value.replace(/\D/g, "")
-
-      if (digits.startsWith("56")) {
-        digits = digits.slice(2)
-      }
-
+      if (digits.startsWith("56")) digits = digits.slice(2)
       digits = digits.slice(0, 9)
       const display = digits.length > 0 ? `+56 ${digits}` : "+56 "
       setFormData((prev) => ({ ...prev, telefono: display }))
@@ -95,6 +152,13 @@ export default function StaffDetalleModal({
     })
   }
 
+  const toggleCuenta = () => {
+    setFormData((prev) => ({
+      ...prev,
+      estado: prev.estado === "activo" ? "inactivo" : "activo",
+    }))
+  }
+
   const handleGuardar = async () => {
     try {
       setSaving(true)
@@ -102,13 +166,11 @@ export default function StaffDetalleModal({
       const payload = {
         nombre_completo: formData.nombre,
         email: formData.email || null,
-        rut: staff.rut, // no lo editamos acá
+        rut: staff.rut,
         activo: formData.estado === "activo",
       }
 
-      if (formData.rol_id) {
-        payload.rol_id = formData.rol_id
-      }
+      if (formData.rol_id) payload.rol_id = formData.rol_id
 
       const res = await fetch(`${API_URL}/api/usuarios/${staff.id}`, {
         method: "PUT",
@@ -117,9 +179,7 @@ export default function StaffDetalleModal({
       })
 
       const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || "Error al actualizar usuario")
-      }
+      if (!res.ok) throw new Error(data.error || "Error al actualizar usuario")
 
       const rolCodigo = data.rol || ""
       const cargoLabel =
@@ -149,6 +209,28 @@ export default function StaffDetalleModal({
       alert(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const recargarActividad = async () => {
+    try {
+      setActLoading(true)
+      setActError("")
+      const res = await fetch(`${API_URL}/api/usuarios/${staff.id}/actividad?limit=50`)
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        setActError(data?.error || "No se pudo cargar la actividad.")
+        setActividad([])
+        return
+      }
+
+      setActividad(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setActError("No se pudo cargar la actividad.")
+      setActividad([])
+    } finally {
+      setActLoading(false)
     }
   }
 
@@ -330,7 +412,161 @@ export default function StaffDetalleModal({
                 </div>
               </div>
 
-              {/* Estado y acciones (mobile) */}
+              {/* Cuenta */}
+              <div className="bg-card border border-border rounded-xl p-5 md:p-6">
+                <h3 className="text-base md:text-lg font-semibold text-foreground mb-4">
+                  Cuenta
+                </h3>
+
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-foreground/60 text-xs mb-1">
+                      Estado de la cuenta
+                    </p>
+
+                    {editMode ? (
+                      <select
+                        name="estado"
+                        value={formData.estado}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-sidebar-primary"
+                      >
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                      </select>
+                    ) : (
+                      <p
+                        className={`font-medium ${
+                          formData.estado === "activo"
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`}
+                      >
+                        {formData.estado.charAt(0).toUpperCase() +
+                          formData.estado.slice(1)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-end">
+                    {editMode ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next =
+                            formData.estado === "activo" ? "inactivo" : "activo"
+                          const ok = window.confirm(
+                            next === "inactivo"
+                              ? "¿Seguro que quieres INHABILITAR esta cuenta?"
+                              : "¿Seguro que quieres HABILITAR esta cuenta?"
+                          )
+                          if (ok) toggleCuenta()
+                        }}
+                        className={`w-full px-3 py-2 rounded-lg border transition-colors text-sm font-medium ${
+                          formData.estado === "activo"
+                            ? "bg-red-500/10 border-red-500/30 text-red-300 hover:bg-red-500/15"
+                            : "bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/15"
+                        }`}
+                      >
+                        {formData.estado === "activo"
+                          ? "Inhabilitar cuenta"
+                          : "Habilitar cuenta"}
+                      </button>
+                    ) : (
+                      <div className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground/60 text-xs">
+                        Activa “Editar” para gestionar la cuenta.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ✅ Actividad del sistema (3 + expand) */}
+              <div className="bg-card border border-border rounded-xl p-5 md:p-6">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h3 className="text-base md:text-lg font-semibold text-foreground">
+                    Actividad en el sistema
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={recargarActividad}
+                    className="px-3 py-1.5 rounded-lg border border-border text-xs text-foreground hover:bg-secondary transition-colors"
+                  >
+                    Recargar
+                  </button>
+                </div>
+
+                {actError ? (
+                  <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-200 text-sm">
+                    {actError}
+                  </div>
+                ) : null}
+
+                {actLoading ? (
+                  <p className="text-sm text-foreground/60">Cargando actividad...</p>
+                ) : actividadUI.length === 0 ? (
+                  <p className="text-sm text-foreground/60">Sin actividad registrada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {actividadUI.map((ev, idx) => (
+                      <div
+                        key={`${ev.tipo}-${ev.fecha_hora}-${idx}`}
+                        className="flex items-start justify-between gap-3 p-3 rounded-lg bg-secondary border border-border"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[11px] border ${badgeForTipo(
+                                ev.tipo,
+                                ev.titulo
+                              )}`}
+                            >
+                              {ev.tipo}
+                            </span>
+                            <span className="text-sm font-semibold text-foreground">
+                              {ev.titulo}
+                            </span>
+                          </div>
+
+                          {ev.detalle ? (
+                            <p className="text-xs text-foreground/70 mt-1 break-words">
+                              {ev.detalle}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-foreground/60">
+                            {ev.fecha_hora
+                              ? new Date(ev.fecha_hora).toLocaleString()
+                              : "-"}
+                          </p>
+                          {ev.ip ? (
+                            <p className="text-[11px] text-foreground/40 mt-1">
+                              IP: {ev.ip}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ✅ Expand / Collapse */}
+                {!actLoading && !actError && Array.isArray(actividad) && actividad.length > 3 && (
+                  <div className="pt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setVerTodo((v) => !v)}
+                      className="px-3 py-1.5 rounded-lg border border-border text-xs text-foreground hover:bg-secondary transition-colors"
+                    >
+                      {verTodo ? "Ver menos" : "Ver más"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Acciones mobile */}
               <div className="bg-card border border-border rounded-xl p-4 md:hidden">
                 <div className="flex items-center justify-between gap-2">
                   <button
@@ -351,17 +587,6 @@ export default function StaffDetalleModal({
                     </button>
                   )}
                 </div>
-              </div>
-
-              {/* Info de sistema (placeholder) */}
-              <div className="bg-card border border-border rounded-xl p-5 md:p-6">
-                <h3 className="text-base md:text-lg font-semibold text-foreground mb-3">
-                  Actividad en el sistema
-                </h3>
-                <p className="text-sm text-foreground/70">
-                  En una próxima versión podrás ver aquí la actividad reciente del
-                  usuario: inicios de sesión, acciones críticas y auditoría de movimientos.
-                </p>
               </div>
             </div>
           </div>
