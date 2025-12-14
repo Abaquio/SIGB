@@ -1,12 +1,12 @@
 // src/routes/ventas.js
 import { Router } from "express"
 import { supabase } from "../supabaseClient.js"
-import PDFDocument from "pdfkit";
+import PDFDocument from "pdfkit"
 
 const router = Router()
 
 /* ======================================================================
-   HELPERS COMPARTIDOS (similar a barriles.js)
+   HELPERS COMPARTIDOS
    ====================================================================== */
 
 function getUsuarioIdFromReq(req) {
@@ -30,7 +30,6 @@ function getClientInfo(req) {
     null
 
   const userAgent = req.headers["user-agent"] || null
-
   return { ip: rawIp, userAgent }
 }
 
@@ -48,13 +47,7 @@ function formatCLP(value) {
 }
 
 // Auditoría GENERAL (tabla auditoria, modulo = 'ventas')
-async function registrarAuditoriaVentas({
-  req,
-  accion, // 'CREAR' | 'ACTUALIZAR' | 'ELIMINAR'
-  entidadId,
-  datosAntes,
-  datosDespues,
-}) {
+async function registrarAuditoriaVentas({ req, accion, entidadId, datosAntes, datosDespues }) {
   try {
     const usuario_id = getUsuarioIdFromReq(req)
     const { ip, userAgent } = getClientInfo(req)
@@ -73,9 +66,7 @@ async function registrarAuditoriaVentas({
       },
     ])
 
-    if (error) {
-      console.error("❌ Error creando registro en auditoria (ventas):", error)
-    }
+    if (error) console.error("❌ Error creando registro en auditoria (ventas):", error)
   } catch (err) {
     console.error("❌ Error inesperado registrando auditoria ventas:", err)
   }
@@ -112,24 +103,20 @@ async function registrarMovimientoVenta(req, barrilId, ventaId, payload) {
       return
     }
 
-    const { error: audError } = await supabase
-      .from("auditoria_movimientos")
-      .insert([
-        {
-          usuario_id: usuario_id ?? null,
-          movimiento_id: mov.id,
-          barril_id: barrilId,
-          accion: "CREAR",
-          datos_antes: null,
-          datos_despues: mov,
-          ip,
-          user_agent: userAgent,
-        },
-      ])
+    const { error: audError } = await supabase.from("auditoria_movimientos").insert([
+      {
+        usuario_id: usuario_id ?? null,
+        movimiento_id: mov.id,
+        barril_id: barrilId,
+        accion: "CREAR",
+        datos_antes: null,
+        datos_despues: mov,
+        ip,
+        user_agent: userAgent,
+      },
+    ])
 
-    if (audError) {
-      console.error("❌ Error creando auditoria_movimientos (venta):", audError)
-    }
+    if (audError) console.error("❌ Error creando auditoria_movimientos (venta):", audError)
   } catch (err) {
     console.error("❌ Error inesperado registrando movimiento venta:", err)
   }
@@ -155,27 +142,14 @@ async function descontarLitrosDeBarril(barrilId, litrosVendidos) {
     }
     if (!barril) return
 
-    const actuales =
-      Number(barril.litros_restantes ?? barril.capacidad_litros ?? 0) || 0
-
+    const actuales = Number(barril.litros_restantes ?? barril.capacidad_litros ?? 0) || 0
     const nuevosLitros = Math.max(0, actuales - litrosVendidos)
 
-    const updatePayload = {
-      litros_restantes: nuevosLitros,
-    }
+    const updatePayload = { litros_restantes: nuevosLitros }
+    if (nuevosLitros <= 0) updatePayload.estado_actual = "AGOTADO"
 
-    if (nuevosLitros <= 0) {
-      updatePayload.estado_actual = "AGOTADO"
-    }
-
-    const { error: updError } = await supabase
-      .from("barriles")
-      .update(updatePayload)
-      .eq("id", barrilId)
-
-    if (updError) {
-      console.error("❌ Error actualizando litros_restantes del barril:", updError)
-    }
+    const { error: updError } = await supabase.from("barriles").update(updatePayload).eq("id", barrilId)
+    if (updError) console.error("❌ Error actualizando litros_restantes del barril:", updError)
   } catch (err) {
     console.error("❌ Error inesperado descontando litros del barril:", err)
   }
@@ -187,15 +161,10 @@ async function vaciarBarril(barrilId) {
 
     const { error } = await supabase
       .from("barriles")
-      .update({
-        litros_restantes: 0,
-        estado_actual: "AGOTADO",
-      })
+      .update({ litros_restantes: 0, estado_actual: "AGOTADO" })
       .eq("id", barrilId)
 
-    if (error) {
-      console.error("❌ Error vaciando barril:", error)
-    }
+    if (error) console.error("❌ Error vaciando barril:", error)
   } catch (err) {
     console.error("❌ Error inesperado vaciando barril:", err)
   }
@@ -212,10 +181,15 @@ router.get("/", async (req, res, next) => {
   try {
     const { desde, hasta } = req.query
 
+    // ✅ FK explícito para asegurar join correcto del usuario
     let query = supabase
       .from("ventas")
       .select(
-        "*, usuarios(nombre_completo,rol), clientes(nombre,rut), bodegas(nombre), venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)"
+        `*,
+         usuarios!ventas_usuario_id_fkey(nombre_completo,rol),
+         clientes(nombre,rut),
+         bodegas(nombre),
+         venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)`
       )
       .order("fecha_hora", { ascending: false })
 
@@ -226,10 +200,7 @@ router.get("/", async (req, res, next) => {
 
     if (error) {
       console.error("❌ Error Supabase en GET /api/ventas:", error)
-      return res.status(500).json({
-        error: "Error al obtener las ventas",
-        details: error.message,
-      })
+      return res.status(500).json({ error: "Error al obtener las ventas", details: error.message })
     }
 
     res.json(data || [])
@@ -244,162 +215,149 @@ router.get("/", async (req, res, next) => {
  */
 router.get("/pdf/:id", async (req, res) => {
   try {
-    const ventaId = Number(req.params.id);
-    if (!ventaId) {
-      return res.status(400).json({ error: "ID inválido" });
-    }
+    const ventaId = Number(req.params.id)
+    if (!ventaId) return res.status(400).json({ error: "ID inválido" })
 
+    // ✅ Traer usuario también (FK explícito)
     const { data: venta, error: errorVenta } = await supabase
       .from("ventas")
-      .select("*, clientes(nombre,rut), bodegas(nombre)")
+      .select(
+        `*,
+         usuarios!ventas_usuario_id_fkey(nombre_completo,rol),
+         clientes(nombre,rut),
+         bodegas(nombre)`
+      )
       .eq("id", ventaId)
-      .maybeSingle();
+      .maybeSingle()
 
     if (errorVenta) {
-      console.error("Error obteniendo venta:", errorVenta);
-      return res.status(500).json({ error: "Error obteniendo venta" });
+      console.error("Error obteniendo venta:", errorVenta)
+      return res.status(500).json({ error: "Error obteniendo venta" })
     }
-
-    if (!venta) {
-      return res.status(404).json({ error: "Venta no encontrada" });
-    }
+    if (!venta) return res.status(404).json({ error: "Venta no encontrada" })
 
     const { data: detalle, error: errorDetalle } = await supabase
       .from("venta_detalle")
       .select("*")
-      .eq("venta_id", ventaId);
+      .eq("venta_id", ventaId)
 
     if (errorDetalle) {
-      console.error("Error obteniendo detalle:", errorDetalle);
-      return res.status(500).json({ error: "Error obteniendo detalle" });
+      console.error("Error obteniendo detalle:", errorDetalle)
+      return res.status(500).json({ error: "Error obteniendo detalle" })
     }
 
-    const barrilIds = [
-      ...new Set(detalle.map((d) => d.barril_id).filter(Boolean)),
-    ];
+    const barrilIds = [...new Set((detalle || []).map((d) => d.barril_id).filter(Boolean))]
+    let barrilesMap = {}
 
-    let barrilesMap = {};
     if (barrilIds.length > 0) {
       const { data: barriles, error: errorBarriles } = await supabase
         .from("barriles")
         .select("id, codigo_interno, tipo_cerveza")
-        .in("id", barrilIds);
+        .in("id", barrilIds)
 
-      if (errorBarriles) {
-        console.error("Error obteniendo barriles:", errorBarriles);
-      } else {
+      if (!errorBarriles) {
         barrilesMap = (barriles || []).reduce((acc, b) => {
-          acc[b.id] = b;
-          return acc;
-        }, {});
+          acc[b.id] = b
+          return acc
+        }, {})
+      } else {
+        console.error("Error obteniendo barriles:", errorBarriles)
       }
     }
 
-    const doc = new PDFDocument({ margin: 40 });
+    const doc = new PDFDocument({ margin: 40 })
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="boleta_${ventaId}.pdf"`
-    );
+    res.setHeader("Content-Type", "application/pdf")
+    // si quieres forzar descarga: attachment; filename=...
+    res.setHeader("Content-Disposition", `inline; filename="boleta_${ventaId}.pdf"`)
 
-    doc.pipe(res);
+    doc.pipe(res)
 
-    doc
-      .fontSize(22)
-      .text("BrewMaster - Recibo de Venta", { align: "center" })
-      .moveDown();
+    doc.fontSize(22).text("BrewMaster - Recibo de Venta", { align: "center" }).moveDown()
 
     doc
       .fontSize(12)
-      .text(`Venta N°: ${venta.numero_documento}`)
-      .text(`Fecha: ${new Date(venta.fecha_hora).toLocaleString()}`)
-      .moveDown();
+      .text(`Documento: ${venta.tipo_documento}${venta.numero_documento ? ` #${venta.numero_documento}` : ""}`)
+      .text(`Fecha: ${venta.fecha_hora ? new Date(venta.fecha_hora).toLocaleString("es-CL") : "—"}`)
+      .moveDown(0.5)
 
-    doc.fontSize(16).text("Datos del Cliente", { underline: true });
-    doc.fontSize(12);
+    // ✅ Usuario que realizó la venta
+    const userName = venta?.usuarios?.nombre_completo || (venta?.usuario_id ? `Usuario #${venta.usuario_id}` : "—")
+    const userRol = (venta?.usuarios?.rol || "—").toString().toUpperCase()
+    doc.text(`Usuario: ${userName} (${userRol})`).moveDown(0.5)
+
+    doc.fontSize(16).text("Datos del Cliente", { underline: true })
+    doc.fontSize(12)
 
     if (venta.clientes) {
-      doc
-        .text(`Nombre: ${venta.clientes.nombre}`)
-        .text(`RUT: ${venta.clientes.rut || "—"}`);
+      doc.text(`Nombre: ${venta.clientes.nombre}`).text(`RUT: ${venta.clientes.rut || "—"}`)
     } else {
-      doc.text("Cliente: Venta sin cliente asociado");
+      doc.text("Cliente: Venta sin cliente asociado")
     }
 
-    doc.moveDown();
+    doc.moveDown()
 
-    doc.fontSize(16).text("Detalle de la Venta", { underline: true });
-    doc.moveDown();
+    doc.fontSize(16).text("Detalle de la Venta", { underline: true }).moveDown(0.5)
 
-    let total = 0;
-
-    detalle.forEach((item) => {
-      const barrilInfo = barrilesMap[item.barril_id] || {};
-      const nombre = barrilInfo.tipo_cerveza || "Barril";
-      const codigo = barrilInfo.codigo_interno || item.barril_id;
+    let total = 0
+    ;(detalle || []).forEach((item) => {
+      const barrilInfo = barrilesMap[item.barril_id] || {}
+      const nombre = barrilInfo.tipo_cerveza || "Barril"
+      const codigo = barrilInfo.codigo_interno || item.barril_id
 
       doc
         .fontSize(12)
         .text(`${nombre} (${codigo})`)
         .text(
-          `Cantidad: ${item.cantidad} ${item.unidad} - P. Unit: $${Number(
-            item.precio_unitario
-          ).toLocaleString()}`
+          `Cantidad: ${item.cantidad} ${item.unidad} - P. Unit: $${Number(item.precio_unitario).toLocaleString("es-CL")}`
         )
-        .text(`Subtotal: $${Number(item.subtotal).toLocaleString()}`)
-        .moveDown(0.5);
+        .text(`Subtotal: $${Number(item.subtotal).toLocaleString("es-CL")}`)
+        .moveDown(0.5)
 
-      total += Number(item.subtotal) || 0;
-    });
+      total += Number(item.subtotal) || 0
+    })
 
-    doc.moveDown();
+    doc.moveDown()
+    doc.fontSize(14).text(`TOTAL: $${Number(total).toLocaleString("es-CL")}`, { align: "right" })
 
-    doc
-      .fontSize(14)
-      .text(`TOTAL: $${Number(total).toLocaleString()}`, { align: "right" });
-
-    doc.end();
+    doc.end()
   } catch (err) {
-    console.error("Error generando PDF:", err);
-    res.status(500).json({ error: "Error generando PDF" });
+    console.error("Error generando PDF:", err)
+    res.status(500).json({ error: "Error generando PDF" })
   }
 })
 
 /**
  * EXPORTAR PDF POR DÍA: GET /api/ventas/pdf-dia?dia=YYYY-MM-DD&caja_id?
- * - Genera un resumen del día (tabla + total) y permite filtrar por caja_id.
  */
 router.get("/pdf-dia", async (req, res) => {
   try {
     const { dia, caja_id } = req.query
-
     const diaStr = String(dia || "").trim()
+
     if (!/^\d{4}-\d{2}-\d{2}$/.test(diaStr)) {
       return res.status(400).json({ error: "Parámetro 'dia' inválido (YYYY-MM-DD)" })
     }
 
-    const start = new Date(`${diaStr}T00:00:00.000Z`)
-    const end = new Date(start)
-    end.setUTCDate(end.getUTCDate() + 1)
+    // ✅ RANGO EN HORA LOCAL (sin 'Z'), para que no se corra el día en Chile
+    const start = new Date(`${diaStr}T00:00:00`)
+    const end = new Date(`${diaStr}T23:59:59.999`)
 
     let query = supabase
       .from("ventas")
       .select(
-        "id, fecha_hora, tipo_documento, numero_documento, metodo_pago, total_bruto, descuento_total, total_neto, estado, observaciones, caja_id, usuarios(nombre_completo,rol)"
+        `id, fecha_hora, tipo_documento, numero_documento, metodo_pago,
+         total_bruto, descuento_total, total_neto, estado, observaciones, caja_id,
+         usuarios!ventas_usuario_id_fkey(nombre_completo,rol)`
       )
       .gte("fecha_hora", start.toISOString())
-      .lt("fecha_hora", end.toISOString())
+      .lte("fecha_hora", end.toISOString())
       .order("fecha_hora", { ascending: false })
 
     const cajaIdNum =
-      caja_id !== undefined && caja_id !== null && String(caja_id).trim() !== ""
-        ? Number(caja_id)
-        : null
+      caja_id !== undefined && caja_id !== null && String(caja_id).trim() !== "" ? Number(caja_id) : null
 
-    if (Number.isFinite(cajaIdNum)) {
-      query = query.eq("caja_id", cajaIdNum)
-    }
+    if (Number.isFinite(cajaIdNum)) query = query.eq("caja_id", cajaIdNum)
 
     const { data: ventasDia, error } = await query
     if (error) {
@@ -452,9 +410,7 @@ router.get("/pdf-dia", async (req, res) => {
       doc.text(totalTxt, 470, y, { width: 85, align: "right" })
       doc.moveDown(0.4)
 
-      if (doc.y > 740) {
-        doc.addPage()
-      }
+      if (doc.y > 740) doc.addPage()
     })
 
     doc.end()
@@ -465,21 +421,21 @@ router.get("/pdf-dia", async (req, res) => {
 })
 
 /**
- * Buscar venta por número de documento (folio)
- * GET /api/ventas/folio/:folio
+ * Buscar venta por folio: GET /api/ventas/folio/:folio
  */
 router.get("/folio/:folio", async (req, res, next) => {
   try {
     const folio = (req.params.folio || "").trim()
-
-    if (!folio) {
-      return res.status(400).json({ error: "Folio inválido" })
-    }
+    if (!folio) return res.status(400).json({ error: "Folio inválido" })
 
     const { data, error } = await supabase
       .from("ventas")
       .select(
-        "*, clientes(nombre,rut), bodegas(nombre), venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)"
+        `*,
+         usuarios!ventas_usuario_id_fkey(nombre_completo,rol),
+         clientes(nombre,rut),
+         bodegas(nombre),
+         venta_detalle(barril_id,cantidad,unidad,precio_unitario,subtotal)`
       )
       .eq("numero_documento", folio)
       .maybeSingle()
@@ -490,7 +446,6 @@ router.get("/folio/:folio", async (req, res, next) => {
     }
 
     if (!data) return res.status(404).json({ error: "Venta no encontrada" })
-
     res.json(data)
   } catch (err) {
     console.error("❌ Error inesperado en GET /api/ventas/folio/:folio:", err)
@@ -503,21 +458,12 @@ router.get("/folio/:folio", async (req, res, next) => {
  */
 router.get("/siguiente-numero", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from("ventas")
-      .select("id")
-      .order("id", { ascending: false })
-      .limit(1)
-
-    if (error) {
-      console.error("❌ Error Supabase en /siguiente-numero:", error)
-      return res.status(500).json({ error: "Error obteniendo correlativo" })
-    }
+    const { data, error } = await supabase.from("ventas").select("id").order("id", { ascending: false }).limit(1)
+    if (error) return res.status(500).json({ error: "Error obteniendo correlativo" })
 
     const lastId = data?.[0]?.id ? Number(data[0].id) : 0
     res.json({ nextNumero: lastId + 1 })
   } catch (err) {
-    console.error("❌ Error inesperado en /siguiente-numero:", err)
     res.status(500).json({ error: "Error obteniendo correlativo" })
   }
 })
@@ -537,20 +483,16 @@ router.post("/", async (req, res, next) => {
       descuento_total,
       observaciones,
       items,
+      usuario_id, // 👈 (opcional) si viene, lo usa el helper
     } = req.body
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "La venta debe incluir al menos un item" })
     }
-
-    if (!tipo_documento) {
-      return res.status(400).json({ error: "tipo_documento es requerido" })
-    }
+    if (!tipo_documento) return res.status(400).json({ error: "tipo_documento es requerido" })
 
     const cajaId =
-      caja_id === null || caja_id === undefined || String(caja_id).trim() === ""
-        ? null
-        : Number(caja_id)
+      caja_id === null || caja_id === undefined || String(caja_id).trim() === "" ? null : Number(caja_id)
 
     let total_bruto = 0
     const detalleItems = items.map((item) => {
@@ -576,7 +518,7 @@ router.post("/", async (req, res, next) => {
       .insert([
         {
           caja_id: Number.isFinite(cajaId) ? cajaId : null,
-          usuario_id: getUsuarioIdFromReq(req), // ✅ ahora sí toma body.usuario_id
+          usuario_id: getUsuarioIdFromReq(req), // ✅ toma header o body.usuario_id
           cliente_id: cliente_id || null,
           bodega_id: bodega_id || null,
           tipo_documento,
@@ -594,29 +536,17 @@ router.post("/", async (req, res, next) => {
 
     if (ventaError) {
       console.error("❌ Error Supabase al crear venta:", ventaError)
-      return res.status(500).json({
-        error: "Error al crear la venta",
-        details: ventaError.message,
-      })
+      return res.status(500).json({ error: "Error al crear la venta", details: ventaError.message })
     }
 
     const ventaId = venta.id
 
-    const detalleConVenta = detalleItems.map((d) => ({
-      ...d,
-      venta_id: ventaId,
-    }))
+    const detalleConVenta = detalleItems.map((d) => ({ ...d, venta_id: ventaId }))
 
-    const { error: detalleError } = await supabase
-      .from("venta_detalle")
-      .insert(detalleConVenta)
-
+    const { error: detalleError } = await supabase.from("venta_detalle").insert(detalleConVenta)
     if (detalleError) {
       console.error("❌ Error Supabase al crear detalle de venta:", detalleError)
-      return res.status(500).json({
-        error: "Error al guardar el detalle de la venta",
-        details: detalleError.message,
-      })
+      return res.status(500).json({ error: "Error al guardar el detalle de la venta", details: detalleError.message })
     }
 
     for (const d of detalleConVenta) {
@@ -644,16 +574,10 @@ router.post("/", async (req, res, next) => {
       accion: "CREAR",
       entidadId: ventaId,
       datosAntes: null,
-      datosDespues: {
-        ...venta,
-        items: detalleItems,
-      },
+      datosDespues: { ...venta, items: detalleItems },
     })
 
-    res.status(201).json({
-      ...venta,
-      items: detalleItems,
-    })
+    res.status(201).json({ ...venta, items: detalleItems })
   } catch (err) {
     console.error("❌ Error inesperado en POST /api/ventas:", err)
     next(err)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 
 export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [] }) {
   const [formData, setFormData] = useState({
@@ -13,7 +13,9 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
     fechaContratacion: new Date().toISOString().split("T")[0],
   })
 
-  // Al abrir el modal, seleccionar primer rol disponible
+  const [emailTouched, setEmailTouched] = useState(false)
+
+  // ✅ Al abrir el modal, seleccionar primer rol disponible
   useEffect(() => {
     if (isOpen && roles.length > 0) {
       setFormData((prev) => ({
@@ -23,20 +25,42 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
     }
   }, [isOpen, roles])
 
+  // ✅ Reset UI states al cerrar
+  useEffect(() => {
+    if (!isOpen) setEmailTouched(false)
+  }, [isOpen])
+
+  // ===============================
+  // VALIDACIONES (hooks siempre arriba)
+  // ===============================
+  const isEmailValido = useMemo(() => {
+    const e = (formData.email || "").trim()
+    // Requiere: texto@texto.texto (sin espacios) y punto DESPUÉS del @
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+    return re.test(e)
+  }, [formData.email])
+
+  const emailError = useMemo(() => {
+    if (!emailTouched) return ""
+    if (!formData.email.trim()) return "El correo es obligatorio."
+    if (!isEmailValido) return 'Ingresa un correo válido (ej: "correo@ejemplo.cl").'
+    return ""
+  }, [emailTouched, formData.email, isEmailValido])
+
+  // ✅ Render condicional después de hooks
   if (!isOpen) return null
 
   // ===============================
-  // VALIDACIONES INPUT
+  // HANDLERS
   // ===============================
   const handleChange = (e) => {
     const { name, value } = e.target
 
+    // ✅ Nombre: permitir espacios mientras escribe (sin trim en vivo)
     if (name === "nombre") {
       let v = value
         .normalize("NFD")
         .replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚüÜ\s]/g, "")
-      v = v.replace(/\s+/g, " ")
-      v = v.replace(/^\s+|\s+$/g, "")
       setFormData((prev) => ({ ...prev, nombre: v }))
       return
     }
@@ -73,6 +97,11 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
       return
     }
 
+    if (name === "email") {
+      setFormData((prev) => ({ ...prev, email: value }))
+      return
+    }
+
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
@@ -104,13 +133,11 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
     return regex.test(rutCompleto.toUpperCase())
   }
 
-  // ===============================
-  // SUBMIT -> POST a /api/usuarios
-  // ===============================
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    const nombre = formData.nombre.trim()
+    // ✅ Limpieza del nombre SOLO al guardar (permite espacios al tipear)
+    const nombre = formData.nombre.replace(/\s+/g, " ").trim()
     const email = formData.email.trim()
     const rut = formData.rut.trim().toUpperCase()
     const password = formData.password.trim()
@@ -120,10 +147,17 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
       alert("El nombre es obligatorio.")
       return
     }
+
+    setEmailTouched(true)
     if (!email) {
       alert("El correo es obligatorio.")
       return
     }
+    if (!isEmailValido) {
+      alert('Ingresa un correo válido (ej: "correo@ejemplo.cl").')
+      return
+    }
+
     if (!password) {
       alert("La contraseña es obligatoria.")
       return
@@ -133,20 +167,14 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
       return
     }
     if (!validarRut(rut)) {
-      alert(
-        'El RUT debe tener el formato 8 dígitos + "-" + 1 dígito o K. Ej: 11222333-4'
-      )
+      alert('El RUT debe tener el formato 8 dígitos + "-" + 1 dígito o K. Ej: 11222333-4')
       return
     }
 
-    let telefonoBonito = ""
+    let telefonoBonito = null
     if (formData.telefono) {
       const t = formData.telefono
-      if (t.length >= 9) {
-        telefonoBonito = `+56 ${t[0]} ${t.slice(1, 5)} ${t.slice(5)}`
-      } else {
-        telefonoBonito = `+56 ${t}`
-      }
+      telefonoBonito = t.length >= 9 ? `+56 ${t[0]} ${t.slice(1, 5)} ${t.slice(5)}` : `+56 ${t}`
     }
 
     const API = import.meta.env.VITE_API_URL || "http://localhost:4000"
@@ -157,7 +185,7 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
       rut,
       rol_id,
       password,
-      telefono: telefonoBonito || null,
+      telefono: telefonoBonito,
     }
 
     try {
@@ -174,10 +202,8 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
         return
       }
 
-      // Pasamos la fila creada al padre
       onAddStaff?.(data)
 
-      // Reset
       setFormData({
         nombre: "",
         email: "",
@@ -188,14 +214,13 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
         fechaContratacion: new Date().toISOString().split("T")[0],
       })
 
+      setEmailTouched(false)
       onClose?.()
     } catch (err) {
       console.error(err)
       alert("Error de conexión al crear el usuario.")
     }
   }
-
-  const telefonoDisplay = formData.telefono
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in duration-200">
@@ -253,9 +278,14 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
+                onBlur={() => setEmailTouched(true)}
                 placeholder="correo@ejemplo.cl"
-                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground"
+                className={[
+                  "w-full px-3 py-2 rounded-lg bg-background border text-sm text-foreground",
+                  emailError ? "border-red-500/60 focus:border-red-500" : "border-border",
+                ].join(" ")}
               />
+              {emailError ? <p className="text-xs text-red-400 mt-1">{emailError}</p> : null}
             </div>
 
             {/* Teléfono */}
@@ -270,7 +300,7 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
                 <input
                   type="text"
                   name="telefono"
-                  value={telefonoDisplay}
+                  value={formData.telefono}
                   onChange={handleChange}
                   placeholder="9 1234 5678"
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground"
@@ -278,7 +308,7 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
               </div>
             </div>
 
-            {/* Rol / Cargo */}
+            {/* Rol */}
             <div>
               <label className="text-sm font-medium text-foreground mb-1 block">
                 Rol / Cargo
@@ -297,7 +327,7 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
               </select>
             </div>
 
-            {/* Fecha de contratación (visual) */}
+            {/* Fecha */}
             <div>
               <label className="text-sm font-medium text-foreground mb-1 block">
                 Fecha de contratación
@@ -311,7 +341,7 @@ export default function NuevoStaffModal({ isOpen, onClose, onAddStaff, roles = [
               />
             </div>
 
-            {/* Contraseña editable */}
+            {/* Contraseña */}
             <div className="md:col-span-2">
               <label className="text-sm font-medium text-foreground mb-1 block">
                 Contraseña asignada

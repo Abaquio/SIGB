@@ -59,37 +59,46 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
   const fetchCajaActual = async () => {
     try {
       setError("")
-      const res = await fetch(`${API_BASE_URL}/api/caja/actual`)
 
-      // Si el server responde 204, no hay contenido => no hay caja abierta
+      const uid = usuario?.id ? Number(usuario.id) : null
+      const url = uid
+        ? `${API_BASE_URL}/api/caja/actual?usuario_id=${uid}`
+        : `${API_BASE_URL}/api/caja/actual`
+
+      const res = await fetch(url)
+
       if (res.status === 204) {
         setCajaActual(null)
         return null
       }
 
-      // Si responde error real
       if (!res.ok) {
-        // intentamos leer mensaje
         const data = await safeReadJson(res)
         throw new Error(data?.error || "Error obteniendo caja")
       }
 
-      // OK: leemos body (puede venir vacío)
       const data = await safeReadJson(res)
-      const abierta = data && String(data?.estado || "").trim().toUpperCase() === "ABIERTA"
-      setCajaActual(abierta ? data : null)
-      return abierta ? data : null
+
+      // ✅ Importante:
+      // - Antes botabas cualquier caja
+      // - Ahora guardamos la caja si viene (ABIERTA o CERRADA), para mostrar "última caja del día"
+      setCajaActual(data || null)
+      return data || null
     } catch (e) {
-      // ✅ Solo mostramos error si es un fallo real de red/servidor
       setCajaActual(null)
-      setError(e?.message || "No se pudo obtener la caja actual.")
+      setError(e?.message || "No se pudo obtener la caja.")
       return null
     }
   }
 
   const fetchResumen = async (cajaId) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/caja/resumen?caja_id=${Number(cajaId)}`)
+      const uid = usuario?.id ? Number(usuario.id) : null
+      const url = uid
+        ? `${API_BASE_URL}/api/caja/resumen?caja_id=${Number(cajaId)}&usuario_id=${uid}`
+        : `${API_BASE_URL}/api/caja/resumen?caja_id=${Number(cajaId)}`
+
+      const res = await fetch(url)
       if (res.status === 204) return null
       if (!res.ok) return null
       const data = await safeReadJson(res)
@@ -110,9 +119,10 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
       const caja = await fetchCajaActual()
       if (caja?.id) await fetchResumen(caja.id)
     })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
-  // Polling solo si hay caja abierta
+  // Polling solo si hay caja ABIERTA
   useEffect(() => {
     if (!isOpen) return
     if (!isCajaAbierta || !cajaActual?.id) return
@@ -122,6 +132,7 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
     }, 1500)
 
     return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isCajaAbierta, cajaActual?.id])
 
   const montoFinalCalculado = useMemo(() => {
@@ -173,18 +184,14 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
       setLoading(true)
       setError("")
 
-      if (!cajaActual?.id) {
+      if (!cajaActual?.id || !isCajaAbierta) {
         setError("No hay caja ABIERTA para cerrar.")
         return
       }
 
       const payload = {
         usuario_id: usuario?.id ?? null,
-        // ✅ si no escriben monto final, cerramos con el calculado
-        monto_final:
-          montoFinalManual === ""
-            ? montoFinalCalculado
-            : Number(montoFinalManual),
+        monto_final: montoFinalManual === "" ? montoFinalCalculado : Number(montoFinalManual),
         observaciones: obs || null,
       }
 
@@ -201,10 +208,14 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
         return
       }
 
-      setCajaActual(null)
-      setResumen(data?.resumen || null)
+      // ✅ Ahora dejamos la caja en estado cerrado y mantenemos el ID visible.
+      // Además refrescamos desde /actual para que quede consistente con "última caja del día".
+      setResumen(data?.resumen || resumen || null)
       setBarrilesLiberados(data?.resumen?.barriles_liberados ?? data?.barriles_liberados ?? null)
       onCajaChange?.(null)
+
+      const cajaRefrescada = await fetchCajaActual()
+      if (cajaRefrescada?.id) await fetchResumen(cajaRefrescada.id)
     } catch (e) {
       setError(e?.message || "Error cerrando caja.")
     } finally {
@@ -257,10 +268,13 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
                   {cajaActual?.fecha_apertura ? (
                     <p className="text-xs text-foreground/70">
                       Apertura: {new Date(cajaActual.fecha_apertura).toLocaleString()}
+                      {cajaActual?.fecha_cierre ? (
+                        <> · Cierre: {new Date(cajaActual.fecha_cierre).toLocaleString()}</>
+                      ) : null}
                     </p>
                   ) : (
                     <p className="text-xs text-foreground/70">
-                      No hay caja abierta actualmente.
+                      No hay caja registrada para hoy.
                     </p>
                   )}
                 </div>
@@ -273,17 +287,17 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
               </div>
             </div>
 
-            {/* ✅ Importante: solo mostrar error si realmente hubo error (no cuando la caja es null “normal”) */}
             {error ? (
               <div className="p-3 mb-4 rounded-lg border border-red-500/30 bg-red-500/10 text-red-200 text-sm">
                 {error}
               </div>
             ) : null}
 
-            {isCajaAbierta ? (
+            {/* ✅ Resumen siempre visible cuando exista una caja (ABIERTA o CERRADA) */}
+            {cajaActual?.id ? (
               <div className="p-4 bg-secondary border border-border rounded-lg mb-4">
                 <h3 className="text-lg font-semibold text-foreground mb-3">
-                  Resumen en vivo (día)
+                  Resumen {isCajaAbierta ? "en vivo (día)" : "del turno"}
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -323,7 +337,9 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-foreground/60">Cargando resumen por método...</p>
+                    <p className="text-xs text-foreground/60">
+                      {isCajaAbierta ? "Cargando totales por método..." : "Sin detalle por método."}
+                    </p>
                   )}
                 </div>
               </div>
@@ -337,7 +353,7 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
                   onChange={(e) => setMontoInicial(e.target.value)}
                   type="number"
                   placeholder="0"
-                  disabled={isCajaAbierta}
+                  disabled={isCajaAbierta} // (lo dejamos igual para no cambiar tu flujo)
                   className="w-full px-4 py-2 bg-secondary border border-border rounded-lg text-foreground placeholder:text-foreground/50 focus:outline-none focus:border-sidebar-primary disabled:opacity-60"
                 />
               </div>
@@ -345,7 +361,7 @@ export default function CajaModal({ isOpen, onClose, onCajaChange }) {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Monto final (en vivo)</label>
                 <input
-                  value={isCajaAbierta ? String(montoFinalCalculado || 0) : "0"}
+                  value={cajaActual?.id ? String(montoFinalCalculado || 0) : "0"}
                   readOnly
                   disabled
                   className="w-full px-4 py-2 bg-secondary border border-border rounded-lg text-foreground placeholder:text-foreground/50 focus:outline-none focus:border-sidebar-primary disabled:opacity-60"

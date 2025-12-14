@@ -13,12 +13,15 @@ function formatCLP(n) {
   }
 }
 
+/**
+ * ✅ FIX: agrupar por día real del ISO (YYYY-MM-DD) para evitar corrimiento por zona horaria.
+ * dateStr puede venir como: "2025-12-13T02:56:00.000Z"
+ */
 function toCLDateLabel(dateStr) {
-  const d = new Date(dateStr)
-  if (Number.isNaN(d.getTime())) return "—"
-  const dd = String(d.getDate()).padStart(2, "0")
-  const mm = String(d.getMonth() + 1).padStart(2, "0")
-  const yyyy = d.getFullYear()
+  if (!dateStr) return "—"
+  const isoDay = String(dateStr).slice(0, 10) // "YYYY-MM-DD"
+  const [yyyy, mm, dd] = isoDay.split("-")
+  if (!yyyy || !mm || !dd) return "—"
   return `${dd}-${mm}-${yyyy}`
 }
 
@@ -130,11 +133,16 @@ export default function HistorialVentaModal({ isOpen, onClose, cajaId = null }) 
     })
 
     const arr = Array.from(map.entries())
+
+    // ✅ FIX: ordenar por el día (no por la primera venta, así no depende de timezone)
     arr.sort((a, b) => {
-      const da = a[1]?.[0]?.fecha_hora ? new Date(a[1][0].fecha_hora).getTime() : 0
-      const db = b[1]?.[0]?.fecha_hora ? new Date(b[1][0].fecha_hora).getTime() : 0
-      return db - da
+      const daISO = diaCLToISO(a[0]) // "YYYY-MM-DD"
+      const dbISO = diaCLToISO(b[0])
+      const ta = daISO ? new Date(`${daISO}T00:00:00`).getTime() : 0
+      const tb = dbISO ? new Date(`${dbISO}T00:00:00`).getTime() : 0
+      return tb - ta
     })
+
     return arr
   }, [ventasFiltradas])
 
@@ -271,9 +279,7 @@ export default function HistorialVentaModal({ isOpen, onClose, cajaId = null }) 
                               <div className="text-sm font-semibold text-foreground flex items-center gap-2">
                                 <span className="opacity-80">📅</span> {dia}
                               </div>
-                              <div className="text-xs text-foreground/60 mt-1">
-                                {list.length} ventas
-                              </div>
+                              <div className="text-xs text-foreground/60 mt-1">{list.length} ventas</div>
                             </div>
 
                             <div className="text-right">
@@ -345,12 +351,15 @@ export default function HistorialVentaModal({ isOpen, onClose, cajaId = null }) 
                             {ventasDelDia.slice(0, limit).map((v) => {
                               const active = ventaSeleccionada?.id === v.id
 
-                              const docLabel = `${v?.tipo_documento || "DOC"}${v?.numero_documento ? ` #${v.numero_documento}` : ""}`
+                              const docLabel = `${v?.tipo_documento || "DOC"}${
+                                v?.numero_documento ? ` #${v.numero_documento}` : ""
+                              }`
                               const pago = String(v?.metodo_pago || "OTRO").toUpperCase()
                               const estado = String(v?.estado || "—").toUpperCase()
                               const total = v?.total_neto ?? v?.total_bruto ?? 0
 
-                              const userName = v?.usuarios?.nombre_completo || (v?.usuario_id ? `Usuario #${v.usuario_id}` : "—")
+                              const userName =
+                                v?.usuarios?.nombre_completo || (v?.usuario_id ? `Usuario #${v.usuario_id}` : "—")
                               const userRol = String(v?.usuarios?.rol || "—").toUpperCase()
 
                               return (
@@ -361,19 +370,13 @@ export default function HistorialVentaModal({ isOpen, onClose, cajaId = null }) 
                                     active ? "bg-secondary/40" : "hover:bg-secondary/30"
                                   }`}
                                 >
-                                  <td className="px-4 py-3 text-foreground">
-                                    {toCLDateTimeLabel(v?.fecha_hora)}
-                                  </td>
-                                  <td className="px-4 py-3 text-foreground font-semibold">
-                                    {docLabel}
-                                  </td>
+                                  <td className="px-4 py-3 text-foreground">{toCLDateTimeLabel(v?.fecha_hora)}</td>
+                                  <td className="px-4 py-3 text-foreground font-semibold">{docLabel}</td>
                                   <td className="px-4 py-3 text-foreground">
                                     {userName} <span className="text-foreground/60">({userRol})</span>
                                   </td>
                                   <td className="px-4 py-3 text-foreground">{pago}</td>
-                                  <td className="px-4 py-3 text-foreground font-semibold">
-                                    {formatCLP(total)}
-                                  </td>
+                                  <td className="px-4 py-3 text-foreground font-semibold">{formatCLP(total)}</td>
                                   <td className="px-4 py-3 text-foreground">{estado}</td>
                                 </tr>
                               )
@@ -390,16 +393,26 @@ export default function HistorialVentaModal({ isOpen, onClose, cajaId = null }) 
                           <div className="text-sm font-semibold text-foreground mb-2">Detalle</div>
                           <div className="text-sm text-foreground/80 space-y-1">
                             <div>
-                              Bruto: <span className="font-semibold text-foreground">{formatCLP(ventaSeleccionada.total_bruto)}</span>
+                              Bruto:{" "}
+                              <span className="font-semibold text-foreground">
+                                {formatCLP(ventaSeleccionada.total_bruto)}
+                              </span>
                             </div>
                             <div>
-                              Descuento: <span className="font-semibold text-foreground">{formatCLP(ventaSeleccionada.descuento_total)}</span>
+                              Descuento:{" "}
+                              <span className="font-semibold text-foreground">
+                                {formatCLP(ventaSeleccionada.descuento_total)}
+                              </span>
                             </div>
                             <div>
-                              Neto: <span className="font-semibold text-foreground">{formatCLP(ventaSeleccionada.total_neto)}</span>
+                              Neto:{" "}
+                              <span className="font-semibold text-foreground">
+                                {formatCLP(ventaSeleccionada.total_neto)}
+                              </span>
                             </div>
                             <div className="pt-1">
-                              Obs: <span className="text-foreground">{ventaSeleccionada.observaciones || "—"}</span>
+                              Obs:{" "}
+                              <span className="text-foreground">{ventaSeleccionada.observaciones || "—"}</span>
                             </div>
                           </div>
                         </div>
@@ -418,12 +431,16 @@ export default function HistorialVentaModal({ isOpen, onClose, cajaId = null }) 
                                   <div className="text-sm text-foreground">
                                     <div className="font-semibold">Barril #{it?.barril_id ?? "—"}</div>
                                     <div className="text-xs text-foreground/60">
-                                      {it?.cantidad ?? 0} {String(it?.unidad || "").toUpperCase()} • {formatCLP(it?.precio_unitario ?? 0)}
+                                      {it?.cantidad ?? 0} {String(it?.unidad || "").toUpperCase()} •{" "}
+                                      {formatCLP(it?.precio_unitario ?? 0)}
                                     </div>
                                   </div>
 
                                   <div className="text-sm font-bold text-foreground">
-                                    {formatCLP(it?.subtotal ?? (Number(it?.cantidad || 0) * Number(it?.precio_unitario || 0)))}
+                                    {formatCLP(
+                                      it?.subtotal ??
+                                        Number(it?.cantidad || 0) * Number(it?.precio_unitario || 0)
+                                    )}
                                   </div>
                                 </div>
                               ))
