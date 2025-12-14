@@ -36,25 +36,19 @@ function getCategoriaMovimiento(tipoRaw) {
     t.includes("REACTIVAR_BARRIL") ||
     t.includes("ALTA") ||
     t.includes("CREAR")
-  ) {
-    return "CREACION"
-  }
+  ) return "CREACION"
 
   if (
     t.includes("DESACTIVAR_BARRIL") ||
     t.includes("BAJA") ||
     t.includes("ELIMINAR")
-  ) {
-    return "ELIMINACION"
-  }
+  ) return "ELIMINACION"
 
   if (
     t.includes("CAMBIO_UBICACION") ||
     t.includes("CAMBIO_ESTADO") ||
     t.includes("ACTUALIZAR")
-  ) {
-    return "ACTUALIZACION"
-  }
+  ) return "ACTUALIZACION"
 
   return "OTRO"
 }
@@ -67,14 +61,24 @@ function getEtiquetaMovimiento(tipoRaw) {
   return "Otro"
 }
 
-function startOfHour(d) {
+function pad2(n) {
+  return String(n).padStart(2, "0")
+}
+
+function toYYYYMMDD(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+function startOfDay(d) {
   const x = new Date(d)
-  x.setMinutes(0, 0, 0)
+  x.setHours(0, 0, 0, 0)
   return x
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0")
+function addDays(d, n) {
+  const x = new Date(d)
+  x.setDate(x.getDate() + n)
+  return x
 }
 
 export default function MovimientosWidget() {
@@ -97,6 +101,8 @@ export default function MovimientosWidget() {
         setMovimientos(Array.isArray(data) ? data : [])
       } catch (err) {
         console.error(err)
+        // si el abort viene por navegación/hmr, no lo muestres como error feo
+        if (String(err?.name).toLowerCase() === "aborterror") return
         setError("No se pudieron cargar movimientos")
         setMovimientos([])
       } finally {
@@ -108,47 +114,29 @@ export default function MovimientosWidget() {
     return () => ac.abort()
   }, [])
 
+  // ✅ Chart: últimos 30 días agrupado por DÍA (no por hora)
   const chartData = useMemo(() => {
-    const now = new Date()
-    const end = startOfHour(now)
-    const start = new Date(end)
-    start.setHours(start.getHours() - 23) // 24 horas
+    const today = startOfDay(new Date())
+    const start = addDays(today, -29) // 30 días (incluye hoy)
 
-    // buckets de 24h (incluye horas con 0)
+    // buckets diarios con 0
     const buckets = []
     const map = new Map()
-    for (let i = 0; i < 24; i++) {
-      const t = new Date(start)
-      t.setHours(start.getHours() + i)
 
-      const hora = `${pad2(t.getHours())}:00`
-      const row = { hora, creaciones: 0, actualizaciones: 0, eliminaciones: 0 }
+    for (let i = 0; i < 30; i++) {
+      const d = addDays(start, i)
+      const key = toYYYYMMDD(d)
+      const label = `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}` // DD/MM
+      const row = { dia: label, _key: key, creaciones: 0, actualizaciones: 0, eliminaciones: 0 }
       buckets.push(row)
-      map.set(t.toISOString(), row)
-    }
-
-    const within = (m) => {
-      const dt = m?.fecha_hora ? new Date(m.fecha_hora) : null
-      if (!dt || Number.isNaN(dt.getTime())) return false
-      return dt >= start && dt <= new Date(end.getTime() + 59 * 60 * 1000 + 59 * 1000)
-    }
-
-    const getBucketISO = (dt) => {
-      const h = startOfHour(dt)
-      // igualamos día/hora al mismo “start window”
-      // construimos iso comparando por diferencia de horas
-      const diffHours = Math.floor((h.getTime() - start.getTime()) / (60 * 60 * 1000))
-      if (diffHours < 0 || diffHours > 23) return null
-      const b = new Date(start)
-      b.setHours(start.getHours() + diffHours)
-      return b.toISOString()
+      map.set(key, row)
     }
 
     for (const mov of movimientos) {
-      if (!within(mov)) continue
+      if (!mov?.fecha_hora) continue
       const dt = new Date(mov.fecha_hora)
-      const key = getBucketISO(dt)
-      if (!key) continue
+      if (Number.isNaN(dt.getTime())) continue
+      const key = toYYYYMMDD(dt)
       const bucket = map.get(key)
       if (!bucket) continue
 
@@ -158,9 +146,11 @@ export default function MovimientosWidget() {
       else if (cat === "ELIMINACION") bucket.eliminaciones += 1
     }
 
-    return buckets
+    // quitamos _key antes de retornar
+    return buckets.map(({ _key, ...rest }) => rest)
   }, [movimientos])
 
+  // ✅ Últimos 5 movimientos (sin filtro de fecha, siempre los más recientes)
   const ultimos = useMemo(() => {
     const sorted = [...movimientos].sort((a, b) => {
       const da = new Date(a.fecha_hora || 0).getTime()
@@ -179,7 +169,7 @@ export default function MovimientosWidget() {
             Movimientos
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            {loading ? "Cargando..." : error ? error : "Últimas 24 horas"}
+            {loading ? "Cargando..." : error ? error : "Últimos 30 días (por día)"}
           </p>
         </div>
 
@@ -195,7 +185,12 @@ export default function MovimientosWidget() {
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-            <XAxis dataKey="hora" stroke="#ccc" tick={{ fontSize: 11 }} interval={3} />
+            <XAxis
+              dataKey="dia"
+              stroke="#ccc"
+              tick={{ fontSize: 11 }}
+              interval={4} // muestra 1 etiqueta cada 5 aprox (para que no se amontone)
+            />
             <YAxis stroke="#ccc" tick={{ fontSize: 11 }} />
             <Tooltip
               contentStyle={{

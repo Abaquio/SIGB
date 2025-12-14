@@ -4,27 +4,48 @@ import { supabase } from "../supabaseClient.js"
 
 const router = Router()
 
-// Normaliza el movimiento para el front
+// Normaliza el movimiento para el front (SEGURA)
 function mapMovimiento(row) {
-  const barril = row.barriles
-  const usuario = row.usuarios
-
   return {
-    ...row,
-    barril_codigo_interno: barril?.codigo_interno || null,
-    usuario_nombre: usuario?.nombre_completo || null,
+    id: row.id,
+    fecha_hora: row.fecha_hora,
+    tipo_movimiento: row.tipo_movimiento,
+    observaciones: row.observaciones,
+
+    barril_id: row.barril_id,
+    barril_codigo_interno: row.barriles?.codigo_interno || null,
+
+    usuario_id: row.usuario_id,
+    usuario_nombre: row.usuarios?.nombre_completo || null,
+
+    ubicacion_origen: row.ubicacion_origen,
+    ubicacion_destino: row.ubicacion_destino,
   }
 }
 
 // =====================
 // GET /api/movimientos
 // =====================
-// Lista de movimientos (por ahora sin filtros, solo ordenados por fecha)
-router.get("/", async (req, res, next) => {
+router.get("/", async (_req, res, next) => {
   try {
     const { data, error } = await supabase
       .from("movimientos")
-      .select("*, barriles(codigo_interno), usuarios(nombre_completo)")
+      .select(`
+        id,
+        fecha_hora,
+        tipo_movimiento,
+        observaciones,
+        barril_id,
+        usuario_id,
+        ubicacion_origen,
+        ubicacion_destino,
+        barriles: barril_id (
+          codigo_interno
+        ),
+        usuarios: usuario_id (
+          nombre_completo
+        )
+      `)
       .order("fecha_hora", { ascending: false })
 
     if (error) {
